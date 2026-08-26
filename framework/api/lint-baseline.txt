@@ -83,5 +83,29 @@ RequiresPermission: android.net.wifi.rtt.WifiRttManager#startRanging(android.net
     Method 'startRanging' documentation mentions permissions already declared by @RequiresPermission
 
 
+UnflaggedApi: android.net.wifi.FakeWifi:
+    New API must be flagged with @FlaggedApi: class android.net.wifi.FakeWifi
+UnflaggedApi: android.net.wifi.FakeWifi#createDhcpInfo():
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.createDhcpInfo()
+UnflaggedApi: android.net.wifi.FakeWifi#createNetworkInfo(int, boolean):
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.createNetworkInfo(int,boolean)
+UnflaggedApi: android.net.wifi.FakeWifi#createWifiInfo():
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.createWifiInfo()
+UnflaggedApi: android.net.wifi.FakeWifi#getFakeNetworkInfo():
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.getFakeNetworkInfo()
+UnflaggedApi: android.net.wifi.FakeWifi#getIpInfo():
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.getIpInfo()
+UnflaggedApi: android.net.wifi.FakeWifi#isHackEnabled(android.content.Context):
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.isHackEnabled(android.content.Context)
+UnflaggedApi: android.net.wifi.FakeWifi#isIPv4Address(String):
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.isIPv4Address(String)
+UnflaggedApi: android.net.wifi.FakeWifi#maybeOverwrite(android.net.NetworkInfo):
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.maybeOverwrite(android.net.NetworkInfo)
+UnflaggedApi: android.net.wifi.FakeWifi#netmask_to_hex(int):
+    New API must be flagged with @FlaggedApi: method android.net.wifi.FakeWifi.netmask_to_hex(int)
+UnflaggedApi: android.net.wifi.FakeWifi.IpInfo:
+    New API must be flagged with @FlaggedApi: class android.net.wifi.FakeWifi.IpInfo
+
+
 VisiblySynchronized: android.net.wifi.WifiManager.WifiLock#finalize():
     Internal locks must not be exposed (synchronizing on this or class is still externally observable): method android.net.wifi.WifiManager.WifiLock.finalize()

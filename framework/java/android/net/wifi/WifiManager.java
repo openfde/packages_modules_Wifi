@@ -63,6 +63,7 @@ import android.net.NetworkRequest;
 import android.net.NetworkStack;
 import android.net.TetheringManager;
 import android.net.Uri;
+import android.net.wifi.FakeWifi;
 import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
@@ -4842,6 +4843,9 @@ public class WifiManager {
     @Deprecated
     @RequiresPermission(allOf = {ACCESS_WIFI_STATE, ACCESS_FINE_LOCATION}, conditional = true)
     public WifiInfo getConnectionInfo() {
+        if (FakeWifi.isHackEnabled(mContext)) {
+            return FakeWifi.createWifiInfo();
+        }
         try {
             return mService.getConnectionInfo(mContext.getOpPackageName(),
                     mContext.getAttributionTag());
@@ -5465,6 +5469,9 @@ public class WifiManager {
      */
     @Deprecated
     public DhcpInfo getDhcpInfo() {
+        if (FakeWifi.isHackEnabled(mContext) && FakeWifi.getIpInfo() != null) {
+            return FakeWifi.createDhcpInfo();
+        }
         try {
             return mService.getDhcpInfo(mContext.getOpPackageName());
         } catch (RemoteException e) {
@@ -5680,6 +5687,9 @@ public class WifiManager {
      * @see #isWifiEnabled()
      */
     public int getWifiState() {
+        if (FakeWifi.isHackEnabled(mContext)) {
+            return WifiManager.WIFI_STATE_ENABLED;
+        }
         try {
             return mService.getWifiEnabledState();
         } catch (RemoteException e) {
@@ -5693,6 +5703,9 @@ public class WifiManager {
      * @see #getWifiState()
      */
     public boolean isWifiEnabled() {
+        if (FakeWifi.isHackEnabled(mContext)) {
+            return true;
+        }
         return getWifiState() == WIFI_STATE_ENABLED;
     }
 

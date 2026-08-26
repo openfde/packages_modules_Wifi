@@ -33,6 +33,22 @@ package android.net.wifi {
     field public static final int EASY_CONNECT_EVENT_FAILURE_URI_GENERATION = -13; // 0xfffffff3
   }
 
+  public final class FakeWifi {
+    method @NonNull public static android.net.DhcpInfo createDhcpInfo();
+    method @NonNull public static android.net.NetworkInfo createNetworkInfo(int, boolean);
+    method @NonNull public static android.net.wifi.WifiInfo createWifiInfo();
+    method @NonNull public static android.net.NetworkInfo getFakeNetworkInfo();
+    method @Nullable public static android.net.wifi.FakeWifi.IpInfo getIpInfo();
+    method public static boolean isHackEnabled(@NonNull android.content.Context);
+    method public static boolean isIPv4Address(@NonNull String);
+    method @Nullable public static android.net.NetworkInfo maybeOverwrite(@Nullable android.net.NetworkInfo);
+    method public static int netmask_to_hex(int);
+  }
+
+  public static class FakeWifi.IpInfo {
+    ctor public FakeWifi.IpInfo();
+  }
+
   public final class MloLink implements android.os.Parcelable {
     ctor public MloLink();
     method public int describeContents();
