@@ -196,6 +196,7 @@ import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
@@ -7173,6 +7174,9 @@ public class WifiServiceImpl extends IWifiManager.Stub {
     @Override
     public String[] getFactoryMacAddresses() {
         final int uid = Binder.getCallingUid();
+        if (TextUtils.equals(SystemProperties.get("fde.fake_wifi_mac", "0"), "1")) {
+            return new String[]{"90:3b:c3:48:4f:f5"};
+        }
         if (!mWifiPermissionsUtil.checkNetworkSettingsPermission(uid)) {
             throw new SecurityException("App not allowed to get Wi-Fi factory MAC address "
                     + "(uid = " + uid + ")");
