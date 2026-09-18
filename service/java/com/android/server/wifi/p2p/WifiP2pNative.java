@@ -19,6 +19,8 @@ package com.android.server.wifi.p2p;
 import static com.android.server.wifi.HalDeviceManager.HDM_CREATE_IFACE_P2P;
 import static com.android.server.wifi.WifiSettingsConfigStore.WIFI_P2P_SUPPORTED_FEATURES;
 
+import android.openfde.P2p;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
@@ -75,6 +77,7 @@ public class WifiP2pNative {
     private final WifiInjector mWifiInjector;
     private final FeatureFlags mFeatureFlags;
     private final Object mLock = new Object();
+    private static P2p mFdeP2p;
     private WifiNative.Iface mP2pIface;
     private String mP2pIfaceName;
     private InterfaceDestroyedListenerInternal mInterfaceDestroyedListener;
@@ -157,6 +160,7 @@ public class WifiP2pNative {
         mPropertyService = propertyService;
         mWifiInjector = wifiInjector;
         mFeatureFlags = wifiInjector.getDeviceConfigFacade().getFeatureFlags();
+        mFdeP2p = P2p.getInstance(null);
     }
 
     /**

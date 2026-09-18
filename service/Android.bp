@@ -142,7 +142,10 @@ java_library {
         "standalone-system-server-module-optimize-defaults",
     ],
     installable: true,
-    static_libs: ["wifi-service-pre-jarjar"],
+    static_libs: [
+        "wifi-service-pre-jarjar",
+        "org.openfde.platform.p2p",
+    ],
 
     dex_preopt: {
         // The profile is updated monthly with the bootclasspath/system_server
