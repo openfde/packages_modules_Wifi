@@ -409,7 +409,7 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
     private boolean mListenStarted;
 
     // Track whether DISALLOW_WIFI_DIRECT user restriction has been set
-    private boolean mIsP2pDisallowedByAdmin = false;
+    private boolean mIsP2pDisallowedByAdmin = true;
 
     // Track the last p2p availability state that was broadcasted
     private boolean mLastP2pState = false;
