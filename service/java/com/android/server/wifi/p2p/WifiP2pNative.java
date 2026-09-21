@@ -652,7 +652,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pSetListenChannel(int lc) {
-        return mSupplicantP2pIfaceHal.setListenChannel(lc);
+        return mP2p.p2pSet("p2p_listen_channel " + lc);
     }
 
     /**
@@ -667,7 +667,7 @@ public class WifiP2pNative {
             Log.wtf(TAG, "unsafeChannels is null.");
             return false;
         }
-        return mSupplicantP2pIfaceHal.setOperatingChannel(oc, unsafeChannels);
+        return mP2p.p2pSet("p2p_oper_channel " + oc);
     }
 
     /**
