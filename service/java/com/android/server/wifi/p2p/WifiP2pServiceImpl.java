@@ -409,7 +409,7 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
     private boolean mListenStarted;
 
     // Track whether DISALLOW_WIFI_DIRECT user restriction has been set
-    private boolean mIsP2pDisallowedByAdmin = true;
+    private boolean mIsP2pDisallowedByAdmin = false;
 
     // Track the last p2p availability state that was broadcasted
     private boolean mLastP2pState = false;
@@ -2004,7 +2004,8 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
         }
 
         boolean isP2pDisabled() {
-            return getCurrentState() == mP2pDisabledState;
+            return false;
+            //return getCurrentState() == mP2pDisabledState;
         }
 
         void scheduleIdleShutdown() {
@@ -6087,10 +6088,12 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
         }
 
         public boolean isWifiP2pAvailable() {
-            if (mIsP2pDisallowedByAdmin) return false;
+            return true;
+            /*if (mIsP2pDisallowedByAdmin) return false;
             return mIsWifiEnabled
                     || (mSettingsConfigStore.get(D2D_ALLOWED_WHEN_INFRA_STA_DISABLED)
                             && mWifiGlobals.isD2dSupportedWhenInfraStaDisabled());
+*/
         }
 
         public void checkAndSendP2pStateChangedBroadcast() {
