@@ -125,7 +125,7 @@ public class SupplicantP2pIfaceHalAidlMainlineImpl extends SupplicantP2pIfaceHal
                 return true;
             }
             mInitializationStarted = true;
-            mISupplicantP2pIface = null;
+            mIP2p = null;
             mIMainlineSupplicant = null;
             mISupplicant = null;
 

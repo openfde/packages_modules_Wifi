@@ -33,7 +33,7 @@ public class SupplicantP2pIfaceHalAidlVendorImpl extends SupplicantP2pIfaceHalAi
     private static final String TAG = "SupplicantP2pIfaceHalAidlVendorImpl";
     private final DeathRecipient mSupplicantDeathRecipient =
             () -> {
-                Log.d(TAG, "ISupplicant/ISupplicantP2pIface died");
+                Log.d(TAG, "fdep2pIsupplicant died");
                 synchronized (mLock) {
                     if (mWaitForDeathLatch != null) {
                         mWaitForDeathLatch.countDown();
@@ -59,7 +59,7 @@ public class SupplicantP2pIfaceHalAidlVendorImpl extends SupplicantP2pIfaceHalAi
                 return true;
             }
             mInitializationStarted = true;
-            mISupplicantP2pIface = null;
+            mIP2p = null;
             mISupplicant = getSupplicantMockable();
             if (mISupplicant == null) {
                 Log.e(TAG, "Unable to obtain ISupplicant binder.");

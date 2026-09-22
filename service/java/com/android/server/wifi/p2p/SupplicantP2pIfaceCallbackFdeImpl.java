@@ -24,35 +24,90 @@ import android.hardware.wifi.supplicant.P2pPeerClientDisconnectedEventParams;
 import android.hardware.wifi.supplicant.P2pPeerClientJoinedEventParams;
 import android.hardware.wifi.supplicant.P2pProvisionDiscoveryCompletedEventParams;
 import android.hardware.wifi.supplicant.P2pUsdBasedServiceDiscoveryResultParams;
-import android.openfde.P2p;
+import android.openfde.IP2pCallback;
 
 /**
- * P2P event callback registered to the openfde p2p binder service ("openfdep2p") instead of
+ * P2P event callback registered to the openfde IP2p binder service instead of
  * the vendor supplicant HAL. The fde interface widens byte/char to int and flattens the
  * *WithParams parcelables; each such event is adapted here and forwarded to the parent
  * implementation, which translates it into {@link WifiP2pMonitor} broadcasts. Events whose
  * signatures already match the parent implementation are inherited as-is.
  */
-public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbackAidlImpl
-        implements P2p.EventListener {
+public class SupplicantP2pIfaceCallbackFdeImpl extends IP2pCallback.Stub {
+    private final SupplicantP2pIfaceCallbackAidlImpl mDelegate;
 
     public SupplicantP2pIfaceCallbackFdeImpl(
             String iface, WifiP2pMonitor monitor, int serviceVersion) {
-        super(iface, monitor, serviceVersion);
+        mDelegate = new SupplicantP2pIfaceCallbackAidlImpl(iface, monitor, serviceVersion);
     }
 
     @Override
     public void onDeviceFound(byte[] srcAddress, byte[] p2pDeviceAddress, byte[] primaryDeviceType,
             String deviceName, int configMethods, int deviceCapabilities, int groupCapabilities,
             byte[] wfdDeviceInfo) {
-        super.onDeviceFound(srcAddress, p2pDeviceAddress, primaryDeviceType, deviceName,
+        mDelegate.onDeviceFound(srcAddress, p2pDeviceAddress, primaryDeviceType, deviceName,
                 configMethods, (byte) deviceCapabilities, groupCapabilities, wfdDeviceInfo);
+    }
+
+    @Override
+    public void onDeviceLost(byte[] p2pDeviceAddress) {
+        mDelegate.onDeviceLost(p2pDeviceAddress);
+    }
+
+    @Override
+    public void onFindStopped() {
+        mDelegate.onFindStopped();
+    }
+
+    @Override
+    public void onGoNegotiationCompleted(int status) {
+        mDelegate.onGoNegotiationCompleted(status);
+    }
+
+    @Override
+    public void onGoNegotiationRequest(byte[] srcAddress, int passwordId) {
+        mDelegate.onGoNegotiationRequest(srcAddress, passwordId);
+    }
+
+    @Override
+    public void onGroupFormationFailure(String failureReason) {
+        mDelegate.onGroupFormationFailure(failureReason);
+    }
+
+    @Override
+    public void onGroupFormationSuccess() {
+        mDelegate.onGroupFormationSuccess();
+    }
+
+    @Override
+    public void onGroupRemoved(String groupIfname, boolean isGroupOwner) {
+        mDelegate.onGroupRemoved(groupIfname, isGroupOwner);
+    }
+
+    @Override
+    public void onGroupStarted(String groupIfname, boolean isGroupOwner, byte[] ssid,
+            int frequency, byte[] psk, String passphrase, byte[] goDeviceAddress,
+            boolean isPersistent) {
+        mDelegate.onGroupStarted(groupIfname, isGroupOwner, ssid, frequency, psk, passphrase,
+                goDeviceAddress, isPersistent);
+    }
+
+    @Override
+    public void onInvitationReceived(byte[] srcAddress, byte[] goDeviceAddress, byte[] bssid,
+            int persistentNetworkId, int operatingFrequency) {
+        mDelegate.onInvitationReceived(srcAddress, goDeviceAddress, bssid, persistentNetworkId,
+                operatingFrequency);
+    }
+
+    @Override
+    public void onInvitationResult(byte[] bssid, int status) {
+        mDelegate.onInvitationResult(bssid, status);
     }
 
     @Override
     public void onProvisionDiscoveryCompleted(byte[] p2pDeviceAddress, boolean isRequest,
             int status, int configMethods, String generatedPin) {
-        super.onProvisionDiscoveryCompleted(p2pDeviceAddress, isRequest, (byte) status,
+        mDelegate.onProvisionDiscoveryCompleted(p2pDeviceAddress, isRequest, (byte) status,
                 configMethods, generatedPin);
     }
 
@@ -61,14 +116,29 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
             byte[] primaryDeviceType, String deviceName, int configMethods,
             int deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
             byte[] wfdR2DeviceInfo) {
-        super.onR2DeviceFound(srcAddress, p2pDeviceAddress, primaryDeviceType, deviceName,
+        mDelegate.onR2DeviceFound(srcAddress, p2pDeviceAddress, primaryDeviceType, deviceName,
                 configMethods, (byte) deviceCapabilities, groupCapabilities, wfdDeviceInfo,
                 wfdR2DeviceInfo);
     }
 
     @Override
     public void onServiceDiscoveryResponse(byte[] srcAddress, int updateIndicator, byte[] tlvs) {
-        super.onServiceDiscoveryResponse(srcAddress, (char) updateIndicator, tlvs);
+        mDelegate.onServiceDiscoveryResponse(srcAddress, (char) updateIndicator, tlvs);
+    }
+
+    @Override
+    public void onStaAuthorized(byte[] srcAddress, byte[] p2pDeviceAddress) {
+        mDelegate.onStaAuthorized(srcAddress, p2pDeviceAddress);
+    }
+
+    @Override
+    public void onStaDeauthorized(byte[] srcAddress, byte[] p2pDeviceAddress) {
+        mDelegate.onStaDeauthorized(srcAddress, p2pDeviceAddress);
+    }
+
+    @Override
+    public void onGroupFrequencyChanged(String groupIfname, int frequency) {
+        mDelegate.onGroupFrequencyChanged(groupIfname, frequency);
     }
 
     @Override
@@ -76,7 +146,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
             byte[] primaryDeviceType, String deviceName, int configMethods,
             int deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
             byte[] wfdR2DeviceInfo, byte[] vendorElemBytes) {
-        super.onDeviceFoundWithVendorElements(srcAddress, p2pDeviceAddress, primaryDeviceType,
+        mDelegate.onDeviceFoundWithVendorElements(srcAddress, p2pDeviceAddress, primaryDeviceType,
                 deviceName, configMethods, (byte) deviceCapabilities, groupCapabilities,
                 wfdDeviceInfo, wfdR2DeviceInfo, vendorElemBytes);
     }
@@ -94,7 +164,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         params.passphrase = passphrase;
         params.goDeviceAddress = goDeviceAddress;
         params.isPersistent = isPersistent;
-        super.onGroupStartedWithParams(params);
+        mDelegate.onGroupStartedWithParams(params);
     }
 
     @Override
@@ -103,7 +173,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         P2pPeerClientJoinedEventParams params = new P2pPeerClientJoinedEventParams();
         params.clientInterfaceAddress = srcAddress;
         params.clientDeviceAddress = p2pDeviceAddress;
-        super.onPeerClientJoined(params);
+        mDelegate.onPeerClientJoined(params);
     }
 
     @Override
@@ -111,7 +181,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         P2pPeerClientDisconnectedEventParams params = new P2pPeerClientDisconnectedEventParams();
         params.clientInterfaceAddress = srcAddress;
         params.clientDeviceAddress = p2pDeviceAddress;
-        super.onPeerClientDisconnected(params);
+        mDelegate.onPeerClientDisconnected(params);
     }
 
     @Override
@@ -126,7 +196,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         params.status = (byte) status;
         params.configMethods = configMethods;
         params.generatedPin = generatedPin;
-        super.onProvisionDiscoveryCompletedEvent(params);
+        mDelegate.onProvisionDiscoveryCompletedEvent(params);
     }
 
     @Override
@@ -145,7 +215,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         params.wfdDeviceInfo = wfdDeviceInfo;
         params.wfdR2DeviceInfo = wfdR2DeviceInfo;
         params.vendorElemBytes = vendorElem;
-        super.onDeviceFoundWithParams(params);
+        mDelegate.onDeviceFoundWithParams(params);
     }
 
     @Override
@@ -153,7 +223,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         P2pGoNegotiationReqEventParams params = new P2pGoNegotiationReqEventParams();
         params.srcAddress = srcAddress;
         params.passwordId = passwordId;
-        super.onGoNegotiationRequestWithParams(params);
+        mDelegate.onGoNegotiationRequestWithParams(params);
     }
 
     @Override
@@ -165,7 +235,7 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         params.bssid = bssid;
         params.persistentNetworkId = persistentNetworkId;
         params.operatingFrequencyMHz = operatingFrequencyMHz;
-        super.onInvitationReceivedWithParams(params);
+        mDelegate.onInvitationReceivedWithParams(params);
     }
 
     @Override
@@ -176,6 +246,16 @@ public class SupplicantP2pIfaceCallbackFdeImpl extends SupplicantP2pIfaceCallbac
         params.sessionId = sessionId;
         params.peerMacAddress = srcAddress;
         params.serviceSpecificInfo = tlvs;
-        super.onUsdBasedServiceDiscoveryResult(params);
+        mDelegate.onUsdBasedServiceDiscoveryResult(params);
+    }
+
+    @Override
+    public void onUsdBasedServiceDiscoveryTerminated(int sessionId, int reasonCode) {
+        mDelegate.onUsdBasedServiceDiscoveryTerminated(sessionId, reasonCode);
+    }
+
+    @Override
+    public void onUsdBasedServiceAdvertisementTerminated(int sessionId, int reasonCode) {
+        mDelegate.onUsdBasedServiceAdvertisementTerminated(sessionId, reasonCode);
     }
 }
