@@ -24,7 +24,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.hardware.wifi.supplicant.ConnectionCapabilities;
-import android.hardware.wifi.supplicant.ISupplicantP2pIfaceCallback;
 import android.hardware.wifi.supplicant.KeyMgmtMask;
 import android.hardware.wifi.supplicant.P2pClientEapolIpAddressInfo;
 import android.hardware.wifi.supplicant.P2pDeviceFoundEventParams;
@@ -55,6 +54,7 @@ import android.net.wifi.p2p.WifiP2pWfdInfo;
 import android.net.wifi.p2p.nsd.WifiP2pServiceResponse;
 import android.net.wifi.p2p.nsd.WifiP2pUsdBasedServiceResponse;
 import android.net.wifi.util.Environment;
+import android.openfde.IP2pCallback;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -73,7 +73,7 @@ import java.util.List;
 /**
  * Class used for processing all P2P callbacks for the AIDL implementation.
  */
-public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallback.Stub {
+public class SupplicantP2pIfaceCallbackAidlImpl extends IP2pCallback.Stub {
     private static final String TAG = "SupplicantP2pIfaceCallbackAidlImpl";
     private static boolean sVerboseLoggingEnabled = true;
 
@@ -121,10 +121,10 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      */
     @Override
     public void onDeviceFound(byte[] srcAddress, byte[] p2pDeviceAddress, byte[] primaryDeviceType,
-            String deviceName, int configMethods, byte deviceCapabilities, int groupCapabilities,
+            String deviceName, int configMethods, int deviceCapabilities, int groupCapabilities,
             byte[] wfdDeviceInfo) {
         handleDeviceFound(srcAddress, p2pDeviceAddress, primaryDeviceType, deviceName,
-                configMethods, deviceCapabilities, groupCapabilities, wfdDeviceInfo,
+                configMethods, (byte) deviceCapabilities, groupCapabilities, wfdDeviceInfo,
                 null, null, null, 0, null);
     }
 
@@ -177,7 +177,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      * @param goNegotiationReqEventParams Parameters associated with
      *     GO negotiation request.
      */
-    @Override
     public void onGoNegotiationRequestWithParams(
             P2pGoNegotiationReqEventParams goNegotiationReqEventParams) {
         List<OuiKeyedData> vendorData = null;
@@ -189,6 +188,14 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 goNegotiationReqEventParams.srcAddress,
                 goNegotiationReqEventParams.passwordId,
                 vendorData);
+    }
+
+    @Override
+    public void onGoNegotiationRequestWithParams(byte[] srcAddress, int passwordId, int goIntent) {
+        P2pGoNegotiationReqEventParams params = new P2pGoNegotiationReqEventParams();
+        params.srcAddress = srcAddress;
+        params.passwordId = passwordId;
+        onGoNegotiationRequestWithParams(params);
     }
 
     private void handleGoNegotiationRequestEvent(
@@ -292,7 +299,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      *
      * @param groupStartedEventParams Parameters describing the P2P group.
      */
-    @Override
     public void onGroupStartedWithParams(P2pGroupStartedEventParams groupStartedEventParams) {
         List<OuiKeyedData> vendorData = null;
         int keyMgmtMask = 0;
@@ -317,6 +323,22 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 vendorData,
                 keyMgmtMask,
                 capabilities);
+    }
+
+    @Override
+    public void onGroupStartedWithParams(String groupInterfaceName, boolean isGroupOwner,
+            byte[] ssid, int frequencyMHz, byte[] psk, String passphrase,
+            byte[] goDeviceAddress, boolean isPersistent) {
+        P2pGroupStartedEventParams params = new P2pGroupStartedEventParams();
+        params.groupInterfaceName = groupInterfaceName;
+        params.isGroupOwner = isGroupOwner;
+        params.ssid = ssid;
+        params.frequencyMHz = frequencyMHz;
+        params.psk = psk;
+        params.passphrase = passphrase;
+        params.goDeviceAddress = goDeviceAddress;
+        params.isPersistent = isPersistent;
+        onGroupStartedWithParams(params);
     }
 
     @SuppressLint("NewApi")
@@ -476,7 +498,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      *
      * @param invitationEventParams Parameters of the invitation event.
      */
-    @Override
     public void onInvitationReceivedWithParams(
             P2pInvitationEventParams invitationEventParams) {
         List<OuiKeyedData> vendorData = null;
@@ -491,6 +512,18 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 invitationEventParams.persistentNetworkId,
                 invitationEventParams.operatingFrequencyMHz,
                 vendorData);
+    }
+
+    @Override
+    public void onInvitationReceivedWithParams(byte[] srcAddress, byte[] goDeviceAddress,
+            byte[] bssid, int persistentNetworkId, int operatingFrequencyMHz) {
+        P2pInvitationEventParams params = new P2pInvitationEventParams();
+        params.srcAddress = srcAddress;
+        params.goDeviceAddress = goDeviceAddress;
+        params.bssid = bssid;
+        params.persistentNetworkId = persistentNetworkId;
+        params.operatingFrequencyMHz = operatingFrequencyMHz;
+        onInvitationReceivedWithParams(params);
     }
 
     private void handleInvitationReceivedEvent(
@@ -575,9 +608,9 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      */
     @Override
     public void onProvisionDiscoveryCompleted(byte[] p2pDeviceAddress, boolean isRequest,
-            byte status, int configMethods, String generatedPin) {
+            int status, int configMethods, String generatedPin) {
         handleProvisionDiscoveryCompletedEvent(
-                p2pDeviceAddress, isRequest, status, configMethods, generatedPin, null, null,
+                p2pDeviceAddress, isRequest, (byte) status, configMethods, generatedPin, null, null,
                 0, null);
     }
 
@@ -587,7 +620,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      * @param provisionDiscoveryCompletedEventParams Parameters associated with P2P provision
      *     discovery frame notification.
      */
-    @Override
     public void onProvisionDiscoveryCompletedEvent(
             P2pProvisionDiscoveryCompletedEventParams provisionDiscoveryCompletedEventParams) {
         List<OuiKeyedData> vendorData = null;
@@ -620,6 +652,19 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 vendorData,
                 pairingBootstrappingMethod,
                 pairingPinorPassphrase);
+    }
+
+    @Override
+    public void onProvisionDiscoveryCompletedEvent(byte[] p2pDeviceAddress, int status,
+            int configMethods, String generatedPin) {
+        P2pProvisionDiscoveryCompletedEventParams params =
+                new P2pProvisionDiscoveryCompletedEventParams();
+        params.p2pDeviceAddress = p2pDeviceAddress;
+        params.isRequest = true;
+        params.status = (byte) status;
+        params.configMethods = configMethods;
+        params.generatedPin = generatedPin;
+        onProvisionDiscoveryCompletedEvent(params);
     }
 
     private void handleProvisionDiscoveryCompletedEvent(
@@ -808,7 +853,7 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      * @param tlvs Refer to section 3.1.3.1 of Wifi P2P Technical specification v1.2.
      */
     @Override
-    public void onServiceDiscoveryResponse(byte[] srcAddress, char updateIndicator,
+    public void onServiceDiscoveryResponse(byte[] srcAddress, int updateIndicator,
             byte[] tlvs) {
         List<WifiP2pServiceResponse> response = null;
 
@@ -830,7 +875,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      * @param params Parameters associated with the USD based service discovery result.
      */
     @SuppressLint("NewApi")
-    @Override
     public void onUsdBasedServiceDiscoveryResult(P2pUsdBasedServiceDiscoveryResultParams params) {
         logd("Usd based service discovery result received on " + mInterface);
         if (Environment.isSdkAtLeastB() && wifiDirectR2()) {
@@ -849,6 +893,17 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                     new WifiP2pServiceResponse(dev, usdBasedServiceResponse, params.sessionId));
             mMonitor.broadcastP2pServiceDiscoveryResponse(mInterface, respList);
         }
+    }
+
+    @Override
+    public void onUsdBasedServiceDiscoveryResult(int sessionId, byte[] srcAddress,
+            int updateIndicator, byte[] tlvs) {
+        P2pUsdBasedServiceDiscoveryResultParams params =
+                new P2pUsdBasedServiceDiscoveryResultParams();
+        params.sessionId = sessionId;
+        params.peerMacAddress = srcAddress;
+        params.serviceSpecificInfo = tlvs;
+        onUsdBasedServiceDiscoveryResult(params);
     }
 
     /**
@@ -914,7 +969,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      *
      * @param clientJoinedEventParams Parameters associated with peer client joined event.
      */
-    @Override
     public void onPeerClientJoined(P2pPeerClientJoinedEventParams clientJoinedEventParams) {
         List<OuiKeyedData> vendorData = null;
         ConnectionCapabilities capabilities = null;
@@ -932,6 +986,15 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 clientJoinedEventParams.clientIpAddress,
                 vendorData,
                 capabilities);
+    }
+
+    @Override
+    public void onPeerClientJoined(byte[] srcAddress, byte[] p2pDeviceAddress,
+            boolean isVpSupported) {
+        P2pPeerClientJoinedEventParams params = new P2pPeerClientJoinedEventParams();
+        params.clientInterfaceAddress = srcAddress;
+        params.clientDeviceAddress = p2pDeviceAddress;
+        onPeerClientJoined(params);
     }
 
     @SuppressLint("NewApi")
@@ -975,7 +1038,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      * @param clientDisconnectedEventParams Parameters associated with peer client disconnected
      *     event.
      */
-    @Override
     public void onPeerClientDisconnected(
             P2pPeerClientDisconnectedEventParams clientDisconnectedEventParams) {
         List<OuiKeyedData> vendorData = null;
@@ -988,6 +1050,15 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 clientDisconnectedEventParams.clientInterfaceAddress,
                 clientDisconnectedEventParams.clientDeviceAddress,
                 vendorData);
+    }
+
+    @Override
+    public void onPeerClientDisconnected(byte[] srcAddress, byte[] p2pDeviceAddress) {
+        P2pPeerClientDisconnectedEventParams params =
+                new P2pPeerClientDisconnectedEventParams();
+        params.clientInterfaceAddress = srcAddress;
+        params.clientDeviceAddress = p2pDeviceAddress;
+        onPeerClientDisconnected(params);
     }
 
     private void onP2pApStaDisconnected(
@@ -1027,7 +1098,7 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
     @Override
     public void onR2DeviceFound(byte[] srcAddress, byte[] p2pDeviceAddress,
             byte[] primaryDeviceType, String deviceName, int configMethods,
-            byte deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
+            int deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
             byte[] wfdR2DeviceInfo) {
         WifiP2pDevice device = new WifiP2pDevice();
         device.deviceName = deviceName;
@@ -1050,7 +1121,7 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
             return;
         }
 
-        device.deviceCapability = deviceCapabilities;
+        device.deviceCapability = (byte) deviceCapabilities;
         device.groupCapability = groupCapabilities;
         device.wpsConfigMethodsSupported = configMethods;
         device.status = WifiP2pDevice.AVAILABLE;
@@ -1112,10 +1183,10 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
     @Override
     public void onDeviceFoundWithVendorElements(byte[] srcAddress, byte[] p2pDeviceAddress,
             byte[] primaryDeviceType, String deviceName, int configMethods,
-            byte deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
+            int deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
             byte[] wfdR2DeviceInfo, byte[] vendorElemBytes) {
         handleDeviceFound(srcAddress, p2pDeviceAddress, primaryDeviceType, deviceName,
-                configMethods, deviceCapabilities, groupCapabilities, wfdDeviceInfo,
+                configMethods, (byte) deviceCapabilities, groupCapabilities, wfdDeviceInfo,
                 wfdR2DeviceInfo, vendorElemBytes, null, 0, null);
     }
 
@@ -1125,7 +1196,6 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
      * @param deviceFoundEventParams Parameters associated with the device found event.
      */
     @SuppressLint("NewApi")
-    @Override
     public void onDeviceFoundWithParams(P2pDeviceFoundEventParams deviceFoundEventParams) {
         List<OuiKeyedData> vendorData = null;
         int pairingBootstrappingMethods = 0;
@@ -1164,6 +1234,25 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
                 deviceFoundEventParams.wfdR2DeviceInfo,
                 deviceFoundEventParams.vendorElemBytes,
                 vendorData, pairingBootstrappingMethods, dirInfo);
+    }
+
+    @Override
+    public void onDeviceFoundWithParams(byte[] srcAddress, byte[] p2pDeviceAddress,
+            byte[] primaryDeviceType, String deviceName, int configMethods,
+            int deviceCapabilities, int groupCapabilities, byte[] wfdDeviceInfo,
+            byte[] wfdR2DeviceInfo, byte[] vendorElem) {
+        P2pDeviceFoundEventParams params = new P2pDeviceFoundEventParams();
+        params.srcAddress = srcAddress;
+        params.p2pDeviceAddress = p2pDeviceAddress;
+        params.primaryDeviceType = primaryDeviceType;
+        params.deviceName = deviceName;
+        params.configMethods = configMethods;
+        params.deviceCapabilities = (byte) deviceCapabilities;
+        params.groupCapabilities = groupCapabilities;
+        params.wfdDeviceInfo = wfdDeviceInfo;
+        params.wfdR2DeviceInfo = wfdR2DeviceInfo;
+        params.vendorElemBytes = vendorElem;
+        onDeviceFoundWithParams(params);
     }
 
     /*
@@ -1367,13 +1456,4 @@ public class SupplicantP2pIfaceCallbackAidlImpl extends ISupplicantP2pIfaceCallb
 
     }
 
-    @Override
-    public String getInterfaceHash() {
-        return ISupplicantP2pIfaceCallback.HASH;
-    }
-
-    @Override
-    public int getInterfaceVersion() {
-        return ISupplicantP2pIfaceCallback.VERSION;
-    }
 }

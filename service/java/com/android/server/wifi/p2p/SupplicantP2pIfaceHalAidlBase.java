@@ -200,8 +200,8 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             mIP2p = iface;
 
             if (mMonitor != null) {
-                SupplicantP2pIfaceCallbackFdeImpl callback =
-                        new SupplicantP2pIfaceCallbackFdeImpl(ifaceName, mMonitor,
+                SupplicantP2pIfaceCallbackAidlImpl callback =
+                    new SupplicantP2pIfaceCallbackAidlImpl(ifaceName, mMonitor,
                                 getCachedServiceVersion());
                 if (!registerCallback(callback)) {
                     Log.e(TAG, "Unable to register fde p2p callback for iface " + ifaceName);
@@ -379,10 +379,10 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
     * The callback is registered to the openfde IP2p binder service,
      * which reports wpa_supplicant P2P events for this interface.
      *
-     * @param callback An instance of {@link SupplicantP2pIfaceCallbackFdeImpl}.
+    * @param callback An instance of {@link SupplicantP2pIfaceCallbackAidlImpl}.
      * @return boolean value indicating whether operation was successful.
      */
-    public boolean registerCallback(SupplicantP2pIfaceCallbackFdeImpl callback) {
+    public boolean registerCallback(SupplicantP2pIfaceCallbackAidlImpl callback) {
         synchronized (mLock) {
             try {
                 return mIP2p != null && mIP2p.registerCallback(callback);
