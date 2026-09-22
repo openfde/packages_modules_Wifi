@@ -67,6 +67,7 @@ import android.net.wifi.p2p.WifiP2pUsdBasedServiceDiscoveryConfig;
 import android.net.wifi.p2p.nsd.WifiP2pServiceInfo;
 import android.net.wifi.p2p.nsd.WifiP2pUsdBasedServiceConfig;
 import android.net.wifi.util.Environment;
+import android.openfde.P2p;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -224,11 +225,11 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             mISupplicantP2pIface = iface;
 
             if (mMonitor != null) {
-                ISupplicantP2pIfaceCallback callback =
-                        new SupplicantP2pIfaceCallbackAidlImpl(ifaceName, mMonitor,
+                SupplicantP2pIfaceCallbackFdeImpl callback =
+                        new SupplicantP2pIfaceCallbackFdeImpl(ifaceName, mMonitor,
                                 getCachedServiceVersion());
                 if (!registerCallback(callback)) {
-                    Log.e(TAG, "Unable to register callback for iface " + ifaceName);
+                    Log.e(TAG, "Unable to register fde p2p callback for iface " + ifaceName);
                     return false;
                 }
                 mCallback = callback;
@@ -283,6 +284,10 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 ifaceInfo.type = IfaceType.P2P;
                 mISupplicant.removeInterface(ifaceInfo);
                 mISupplicantP2pIface = null;
+                P2p fdeP2p = P2p.getInstance(null);
+                if (fdeP2p != null) {
+                    fdeP2p.unregisterCallback();
+                }
                 mCallback = null;
                 return true;
             } catch (RemoteException e) {
@@ -418,32 +423,17 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
     }
 
     /**
-     * Register for callbacks from this interface.
+     * Register for P2P event callbacks.
      *
-     * These callbacks are invoked for events that are specific to this interface.
-     * Registration of multiple callback objects is supported. These objects must
-     * be automatically deleted when the corresponding client process is dead or
-     * if this interface is removed.
+     * The callback is registered to the openfde p2p binder service ("openfdep2p"),
+     * which reports wpa_supplicant P2P events for this interface.
      *
-     * @param callback An instance of the |ISupplicantP2pIfaceCallback| AIDL
-     *        interface object.
+     * @param callback An instance of {@link SupplicantP2pIfaceCallbackFdeImpl}.
      * @return boolean value indicating whether operation was successful.
      */
-    public boolean registerCallback(ISupplicantP2pIfaceCallback callback) {
+    public boolean registerCallback(SupplicantP2pIfaceCallbackFdeImpl callback) {
         synchronized (mLock) {
-            String methodStr = "registerCallback";
-            if (!checkP2pIfaceAndLogFailure(methodStr)) {
-                return false;
-            }
-            try {
-                mISupplicantP2pIface.registerCallback(callback);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return P2p.getInstance(null).registerCallback(callback);
         }
     }
 
