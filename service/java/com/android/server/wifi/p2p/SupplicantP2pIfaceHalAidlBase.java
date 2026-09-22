@@ -183,6 +183,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      * @return true on success, false otherwise.
      */
     public boolean setupIface(@NonNull String ifaceName, int userId) {
+        Log.e(TAG, "gy setupIface called with ifaceName: " + ifaceName + " and userId: " + userId);
         synchronized (mLock) {
             if (mP2p != null) {
                 // P2P iface already exists
@@ -266,7 +267,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
         if (!SdkLevel.isAtLeastT()) {
             return false;
         }
-        return P2p.getService() != null;
+        return true;
     }
 
     /**

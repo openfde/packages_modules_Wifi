@@ -3026,6 +3026,7 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
             }
 
             private boolean setupInterface() {
+		        Log.e(TAG, "gy setup interface wifi service impl");
                 if (!isWifiP2pAvailable()) {
                     Log.e(TAG, "Ignore P2P enable since wifi is " + mIsWifiEnabled
                             + ", P2P disallowed by admin=" + mIsP2pDisallowedByAdmin);

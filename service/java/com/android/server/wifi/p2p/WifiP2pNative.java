@@ -244,7 +244,7 @@ public class WifiP2pNative {
             @Nullable HalDeviceManager.InterfaceDestroyedListener destroyedListener,
             @NonNull Handler handler, @NonNull WorkSource requestorWs, int userId) {
         synchronized (mLock) {
-            Log.d(TAG, "Setup P2P interface");
+            Log.e(TAG, "gy Setup P2P interface");
             if (mP2pIfaceName == null) {
                 mInterfaceDestroyedListener = (null == destroyedListener)
                         ? null
@@ -268,6 +268,7 @@ public class WifiP2pNative {
                     mWifiMetrics.incrementNumSetupP2pInterfaceFailureDueToSupplicant();
                     return null;
                 }
+                Log.e(TAG, "gy mSupplicantP2pIfaceHal setup interface " +mP2pIfaceName);
                 if (!mSupplicantP2pIfaceHal.setupIface(mP2pIfaceName, userId)) {
                     Log.e(TAG, "Failed to setup P2p iface in supplicant");
                     teardownInterface();

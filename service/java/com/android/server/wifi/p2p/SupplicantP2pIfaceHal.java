@@ -157,6 +157,7 @@ public class SupplicantP2pIfaceHal {
         synchronized (mLock) {
             String methodStr = "setupIface";
             if (mP2pIfaceHal == null) {
+                Log.e(TAG, "gy mP2pIfaceHal is null in setupIface");
                 return handleNullHal(methodStr);
             }
             return mP2pIfaceHal.setupIface(ifaceName, userId);
