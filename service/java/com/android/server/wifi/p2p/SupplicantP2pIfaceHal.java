@@ -666,6 +666,7 @@ public class SupplicantP2pIfaceHal {
         synchronized (mLock) {
             String methodStr = "setListenChannel";
             if (mP2pIfaceHal == null) {
+                Log.e(TAG,"setListenChannel called with listenChannel: " + listenChannel +" but mP2pIfaceHal is null");
                 return handleNullHal(methodStr);
             }
             return mP2pIfaceHal.setListenChannel(listenChannel);

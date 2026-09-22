@@ -1269,9 +1269,11 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      * @return true, if operation was successful.
      */
     public boolean setListenChannel(int listenChannel) {
+        Log.e(TAG,"setListenChannel called with listenChannel: " + listenChannel);
         synchronized (mLock) {
             String methodStr = "setListenChannel";
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
+                Log.e(TAG,"setListenChannel called with listenChannel: " + listenChannel +" but checkP2pIfaceAndLogFailure failed");
                 return false;
             }
 
@@ -1284,6 +1286,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (listenChannel != 1 && listenChannel != 6 && listenChannel != 11) {
                 return false;
             }
+                Log.e(TAG,"setListenChannel called with listenChannel: " + listenChannel + " before p2pset command");
 
             return mP2p.p2pSet("p2p_listen_channel " + listenChannel);
         }
