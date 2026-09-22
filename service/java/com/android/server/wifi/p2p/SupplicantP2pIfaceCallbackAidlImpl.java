@@ -54,7 +54,7 @@ import android.net.wifi.p2p.WifiP2pWfdInfo;
 import android.net.wifi.p2p.nsd.WifiP2pServiceResponse;
 import android.net.wifi.p2p.nsd.WifiP2pUsdBasedServiceResponse;
 import android.net.wifi.util.Environment;
-import android.openfde.IP2pCallback;
+import android.openfde.P2p;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -73,7 +73,7 @@ import java.util.List;
 /**
  * Class used for processing all P2P callbacks for the AIDL implementation.
  */
-public class SupplicantP2pIfaceCallbackAidlImpl extends IP2pCallback.Stub {
+public class SupplicantP2pIfaceCallbackAidlImpl implements P2p.EventListener {
     private static final String TAG = "SupplicantP2pIfaceCallbackAidlImpl";
     private static boolean sVerboseLoggingEnabled = true;
 

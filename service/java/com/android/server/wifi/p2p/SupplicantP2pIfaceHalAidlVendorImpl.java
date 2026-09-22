@@ -59,7 +59,7 @@ public class SupplicantP2pIfaceHalAidlVendorImpl extends SupplicantP2pIfaceHalAi
                 return true;
             }
             mInitializationStarted = true;
-            mIP2p = null;
+            mP2p = null;
             mISupplicant = getSupplicantMockable();
             if (mISupplicant == null) {
                 Log.e(TAG, "Unable to obtain ISupplicant binder.");

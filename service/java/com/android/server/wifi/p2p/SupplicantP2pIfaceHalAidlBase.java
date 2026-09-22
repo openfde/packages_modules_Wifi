@@ -44,8 +44,7 @@ import android.net.wifi.p2p.WifiP2pUsdBasedServiceDiscoveryConfig;
 import android.net.wifi.p2p.nsd.WifiP2pServiceInfo;
 import android.net.wifi.p2p.nsd.WifiP2pUsdBasedServiceConfig;
 import android.net.wifi.util.Environment;
-import android.openfde.IP2p;
-import android.openfde.IP2pCallback;
+import android.openfde.P2p;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -97,10 +96,10 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
 
     // Supplicant HAL AIDL interface objects
     protected ISupplicant mISupplicant = null;
-    protected IP2p mIP2p = null;
+    protected P2p mP2p = null;
     private final WifiP2pMonitor mMonitor;
     protected final WifiInjector mWifiInjector;
-    private IP2pCallback mCallback = null;
+    private P2p.EventListener mCallback = null;
     private int mServiceVersion = -1;
     protected CountDownLatch mWaitForDeathLatch;
     private final boolean mIsUsingMainlineSupplicant;
@@ -185,19 +184,19 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      */
     public boolean setupIface(@NonNull String ifaceName, int userId) {
         synchronized (mLock) {
-            if (mIP2p != null) {
+            if (mP2p != null) {
                 // P2P iface already exists
                 return false;
             }
             if (!setCurrentUserIdentity(userId)) {
                 return false;
             }
-            IP2p iface = getP2pMockable();
-            if (iface == null) {
-                Log.e(TAG, "Unable to obtain IP2p binder for " + ifaceName);
+            P2p p2p = getP2pMockable();
+            if (p2p == null) {
+                Log.e(TAG, "Unable to obtain P2p instance for " + ifaceName);
                 return false;
             }
-            mIP2p = iface;
+            mP2p = p2p;
 
             if (mMonitor != null) {
                 SupplicantP2pIfaceCallbackAidlImpl callback =
@@ -222,14 +221,9 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
     protected abstract boolean setCurrentUserIdentity(int userId);
 
     @VisibleForTesting
-    protected IP2p getP2pMockable() {
+    protected P2p getP2pMockable() {
         synchronized (mLock) {
-            try {
-                return IP2p.Stub.asInterface(ServiceManager.waitForService(P2P_SERVICE_NAME));
-            } catch (Exception e) {
-                Log.e(TAG, "Unable to get IP2p service", e);
-                return null;
-            }
+            return P2p.getInstance(null);
         }
     }
 
@@ -246,26 +240,17 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                if (mCallback != null) {
-                    mIP2p.unregisterCallback(mCallback);
-                }
-                mIP2p = null;
-                mCallback = null;
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            boolean success = mCallback == null || mP2p.unregisterCallback();
+            mP2p = null;
+            mCallback = null;
+            return success;
         }
     }
 
     protected void supplicantServiceDiedHandler() {
         synchronized (mLock) {
             mISupplicant = null;
-            mIP2p = null;
+            mP2p = null;
             mInitializationStarted = false;
             if (mDeathEventHandler != null) {
                 mDeathEventHandler.onDeath();
@@ -281,7 +266,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
         if (!SdkLevel.isAtLeastT()) {
             return false;
         }
-        return ServiceManager.checkService(P2P_SERVICE_NAME) != null;
+        return P2p.getService() != null;
     }
 
     /**
@@ -325,8 +310,8 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      */
     private boolean checkP2pIfaceAndLogFailure(String methodStr) {
         synchronized (mLock) {
-            if (mIP2p == null) {
-                Log.e(TAG, "Can't call " + methodStr + ", IP2p is null");
+            if (mP2p == null) {
+                Log.e(TAG, "Can't call " + methodStr + ", P2p is null");
                 return false;
             }
             return true;
@@ -384,12 +369,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      */
     public boolean registerCallback(SupplicantP2pIfaceCallbackAidlImpl callback) {
         synchronized (mLock) {
-            try {
-                return mIP2p != null && mIP2p.registerCallback(callback);
-            } catch (RemoteException e) {
-                handleRemoteException(e, "registerCallback");
-                return false;
-            }
+            return mP2p != null && mP2p.registerCallback(callback);
         }
     }
 
@@ -447,38 +427,30 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 Log.e(TAG, "Specified freq for scan type:" + type);
                 return false;
             }
-            try {
-                StringBuilder args = new StringBuilder();
-                if (timeout > 0) {
-                    args.append(timeout);
-                }
-                switch (type) {
-                    case WifiP2pManager.WIFI_P2P_SCAN_FULL:
-                        break;
-                    case WifiP2pManager.WIFI_P2P_SCAN_SOCIAL:
-                        if (args.length() > 0) args.append(' ');
-                        args.append("type=social");
-                        break;
-                    case WifiP2pManager.WIFI_P2P_SCAN_SINGLE_FREQ:
-                        if (freq == WifiP2pManager.WIFI_P2P_SCAN_FREQ_UNSPECIFIED) {
-                            Log.e(TAG, "Unspecified freq for WIFI_P2P_SCAN_SINGLE_FREQ");
-                            return false;
-                        }
-                        if (args.length() > 0) args.append(' ');
-                        args.append("freq=").append(freq);
-                        break;
-                    default:
-                        Log.e(TAG, "Invalid scan type: " + type);
-                        return false;
-                }
-                    mIP2p.p2p_find(args.toString());
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
+            StringBuilder args = new StringBuilder();
+            if (timeout > 0) {
+                args.append(timeout);
             }
-            return false;
+            switch (type) {
+                case WifiP2pManager.WIFI_P2P_SCAN_FULL:
+                    break;
+                case WifiP2pManager.WIFI_P2P_SCAN_SOCIAL:
+                    if (args.length() > 0) args.append(' ');
+                    args.append("type=social");
+                    break;
+                case WifiP2pManager.WIFI_P2P_SCAN_SINGLE_FREQ:
+                    if (freq == WifiP2pManager.WIFI_P2P_SCAN_FREQ_UNSPECIFIED) {
+                        Log.e(TAG, "Unspecified freq for WIFI_P2P_SCAN_SINGLE_FREQ");
+                        return false;
+                    }
+                    if (args.length() > 0) args.append(' ');
+                    args.append("freq=").append(freq);
+                    break;
+                default:
+                    Log.e(TAG, "Invalid scan type: " + type);
+                    return false;
+            }
+            return mP2p.p2pFind(args.toString());
         }
     }
 
@@ -506,15 +478,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return false;
             }
-            try {
-                mIP2p.p2p_stop_find();
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pStopFind();
         }
     }
 
@@ -529,15 +493,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return false;
             }
-            try {
-                mIP2p.p2p_flush();
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pFlush();
         }
     }
 
@@ -553,15 +509,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return false;
             }
-            try {
-                mIP2p.p2p_service_flush();
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pServiceFlush();
         }
     }
 
@@ -606,15 +554,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                mIP2p.p2p_set("group_idle " + groupIfName + " " + timeoutInSec);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pSet("group_idle " + groupIfName + " " + timeoutInSec);
         }
     }
 
@@ -637,15 +577,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                mIP2p.p2p_set("ssid_postfix " + postfix);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pSet("ssid_postfix " + postfix);
         }
     }
 
@@ -678,10 +610,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 if (joinExistingGroup) args.append(" join");
                 if (persistent) args.append(" persistent");
                 args.append(" go_intent=").append(groupOwnerIntent);
-                mIP2p.p2p_connect(args.toString());
-                return "";
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
+                return mP2p.p2pConnect(args.toString()) ? "" : null;
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "Invalid P2P connect address", e);
             }
@@ -870,15 +799,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return false;
             }
-            try {
-                mIP2p.cancelConnect();
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.cancelConnect();
         }
     }
 
@@ -953,15 +874,8 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                         pairingBootstrappingMethod);
             }
 
-            try {
-                mIP2p.p2p_prov_disc(buildProvisionDiscoveryArgs(macAddress, targetWpsMethod));
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pProvDisc(
+                    buildProvisionDiscoveryArgs(macAddress, targetWpsMethod));
         }
     }
 
@@ -972,15 +886,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             Log.e(TAG, "P2P2 provision discovery is not supported by IP2p");
             return false;
         }
-        try {
-            mIP2p.p2p_prov_disc(buildProvisionDiscoveryArgs(macAddress, targetMethod));
-            return true;
-        } catch (RemoteException e) {
-            handleRemoteException(e, methodStr);
-        } catch (ServiceSpecificException e) {
-            handleServiceSpecificException(e, methodStr);
-        }
-        return false;
+        return mP2p.p2pProvDisc(buildProvisionDiscoveryArgs(macAddress, targetMethod));
     }
 
     private static String buildProvisionDiscoveryArgs(byte[] macAddress, int provisionMethod) {
@@ -1071,17 +977,9 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                mIP2p.p2p_invite("group=" + group.getInterface()
+            return mP2p.p2pInvite("group=" + group.getInterface()
                     + " peer=" + NativeUtil.macAddressFromByteArray(peerMacAddress)
                     + " go_dev_addr=" + NativeUtil.macAddressFromByteArray(ownerMacAddress));
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
         }
     }
 
@@ -1114,15 +1012,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                mIP2p.p2p_reject(NativeUtil.macAddressFromByteArray(macAddress));
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pReject(NativeUtil.macAddressFromByteArray(macAddress));
         }
     }
 
@@ -1154,12 +1044,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 Log.e(TAG, "Cannot parse null peer mac address.");
                 return null;
             }
-            try {
-                return getPeerProperty(mIP2p.p2p_peer(address), "oper_ssid");
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            }
-            return null;
+            return getPeerProperty(mP2p.p2pPeer(address), "oper_ssid");
         }
     }
 
@@ -1210,16 +1095,8 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return reinvokePersistentGroupWithParams(macAddress, networkId, dikId);
             }
 
-            try {
-                mIP2p.p2p_invite("persistent=" + networkId + " peer="
+            return mP2p.p2pInvite("persistent=" + networkId + " peer="
                     + NativeUtil.macAddressFromByteArray(macAddress));
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
         }
     }
 
@@ -1243,15 +1120,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (mIsUsingMainlineSupplicant || getCachedServiceVersion() >= 4) {
                 return createGroupOwner(networkId, isPersistent, isP2pV2);
             }
-            try {
-                mIP2p.addGroup(isPersistent, networkId);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.addGroup(isPersistent, networkId);
         }
     }
 
@@ -1260,15 +1129,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             Log.e(TAG, "P2P2 group owner creation is not supported by IP2p");
             return false;
         }
-        try {
-            mIP2p.addGroup(isPersistent, networkId);
-            return true;
-        } catch (RemoteException e) {
-            handleRemoteException(e, "createGroupOwner");
-        } catch (ServiceSpecificException e) {
-            handleServiceSpecificException(e, "createGroupOwner");
-        }
-        return false;
+        return mP2p.addGroup(isPersistent, networkId);
     }
 
     /**
@@ -1317,15 +1178,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (TextUtils.isEmpty(groupName)) {
                 return false;
             }
-            try {
-                mIP2p.p2p_group_remove(groupName);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pGroupRemove(groupName);
         }
     }
 
@@ -1349,11 +1202,9 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             }
 
             try {
-                String value = getPeerProperty(mIP2p.p2p_peer(peerAddress), "group_capab");
+                String value = getPeerProperty(mP2p.p2pPeer(peerAddress), "group_capab");
                 return value == null ? RESULT_NOT_VALID
                         : Integer.parseInt(value.replace("0x", ""), 16);
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
             } catch (NumberFormatException e) {
                 Log.e(TAG, "Invalid group capability for " + peerAddress, e);
             }
@@ -1407,15 +1258,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             return false;
         }
 
-        try {
-            mIP2p.p2p_ext_listen(periodInMillis + " " + intervalInMillis);
-            return true;
-        } catch (RemoteException e) {
-            handleRemoteException(e, methodStr);
-        } catch (ServiceSpecificException e) {
-            handleServiceSpecificException(e, methodStr);
-        }
-        return false;
+        return mP2p.p2pExtListen(periodInMillis + " " + intervalInMillis);
     }
 
     /**
@@ -1442,15 +1285,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                mIP2p.p2p_set("listen_channel " + listenChannel);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pSet("p2p_listen_channel " + listenChannel);
         }
     }
 
@@ -1498,19 +1333,11 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 }
             }
 
-            try {
-                StringBuilder args = new StringBuilder("disallow_freq");
-                for (FreqRange range : ranges) {
-                    args.append(' ').append(range.min).append('-').append(range.max);
-                }
-                mIP2p.p2p_set(args.toString());
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
+            StringBuilder args = new StringBuilder("disallow_freq");
+            for (FreqRange range : ranges) {
+                args.append(' ').append(range.min).append('-').append(range.max);
             }
-            return false;
+            return mP2p.p2pSet(args.toString());
         }
     }
 
@@ -1545,8 +1372,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                     return false;
                 }
 
-                try {
-                    if ("upnp".equals(data[0])) {
+                if ("upnp".equals(data[0])) {
                         int version = 0;
                         try {
                             version = Integer.parseInt(data[1], 16);
@@ -1554,7 +1380,9 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                             Log.e(TAG, "UPnP Service specification invalid: " + s, e);
                             return false;
                         }
-                        mIP2p.p2p_service_rep("upnp " + data[1] + " " + data[2]);
+                        if (!mP2p.p2pServiceRep("upnp " + data[1] + " " + data[2])) {
+                            return false;
+                        }
                     } else if ("bonjour".equals(data[0])) {
                         if (data[1] != null && data[2] != null) {
                             byte[] request = null;
@@ -1566,19 +1394,14 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                                 Log.e(TAG, "Invalid bonjour service description.");
                                 return false;
                             }
-                            mIP2p.addBonjourService(request, response);
+                            if (!mP2p.addBonjourService(request, response)) {
+                                return false;
+                            }
                         }
                     } else {
                         Log.e(TAG, "Unknown / unsupported P2P service requested: " + data[0]);
                         return false;
                     }
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                    return false;
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
-                    return false;
-                }
             }
 
             return true;
@@ -1616,8 +1439,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                     return false;
                 }
 
-                try {
-                    if ("upnp".equals(data[0])) {
+                if ("upnp".equals(data[0])) {
                         int version = 0;
                         try {
                             version = Integer.parseInt(data[1], 16);
@@ -1625,7 +1447,9 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                             Log.e(TAG, "UPnP Service specification invalid: " + s, e);
                             return false;
                         }
-                        mIP2p.p2p_service_del("upnp " + data[1] + " " + data[2]);
+                        if (!mP2p.p2pServiceDel("upnp " + data[1] + " " + data[2])) {
+                            return false;
+                        }
                     } else if ("bonjour".equals(data[0])) {
                         if (data[1] != null) {
                             byte[] request = null;
@@ -1635,19 +1459,14 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                                 Log.e(TAG, "Invalid bonjour service description.");
                                 return false;
                             }
-                            mIP2p.p2p_service_del("bonjour " + data[1]);
+                            if (!mP2p.p2pServiceDel("bonjour " + data[1])) {
+                                return false;
+                            }
                         }
                     } else {
                         Log.e(TAG, "Unknown / unsupported P2P service requested: " + data[0]);
                         return false;
                     }
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                    return false;
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
-                    return false;
-                }
             }
 
             return true;
@@ -1697,14 +1516,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return null;
             }
 
-            try {
-                return mIP2p.p2p_serv_disc_req(peerAddress + " " + query);
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return null;
+            return mP2p.p2pServDiscReq(peerAddress + " " + query);
         }
     }
 
@@ -1725,15 +1537,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
 
-            try {
-                mIP2p.p2p_serv_disc_cancel(identifier);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pServDiscCancel(identifier);
         }
     }
 
@@ -1964,15 +1768,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (name == null) {
                 return false;
             }
-            try {
-                mIP2p.p2p_set("device_name " + name);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pSet("device_name " + name);
         }
     }
 
@@ -2003,14 +1799,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 if (!checkP2pIfaceAndLogFailure(methodStr)) {
                     return false;
                 }
-                try {
-                    mIP2p.p2p_set("device_type " + typeStr);
-                    return true;
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
-                }
+                return mP2p.p2pSet("device_type " + typeStr);
             }
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Illegal argument " + typeStr, e);
@@ -2037,15 +1826,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 configMethodsMask |= stringToWpsConfigMethod(configMethodsStrArr[i]);
             }
 
-            try {
-                mIP2p.p2p_set("config_methods " + configMethodsStr);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pSet("config_methods " + configMethodsStr);
         }
     }
 
@@ -2197,15 +1978,7 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return false;
             }
-            try {
-                mIP2p.p2p_set("random_mac " + (enable ? "1" : "0"));
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pSet("random_mac " + (enable ? "1" : "0"));
         }
     }
 
@@ -2240,16 +2013,8 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return false;
             }
-            try {
-                mIP2p.p2p_remove_client(peerAddress
-                        + (isLegacyClient ? " legacy" : ""));
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return false;
+            return mP2p.p2pRemoveClient(peerAddress
+                    + (isLegacyClient ? " legacy" : ""));
         }
     }
 
