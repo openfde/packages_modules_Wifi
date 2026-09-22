@@ -19,14 +19,11 @@ package com.android.server.wifi.p2p;
 import static com.android.server.wifi.HalDeviceManager.HDM_CREATE_IFACE_P2P;
 import static com.android.server.wifi.WifiSettingsConfigStore.WIFI_P2P_SUPPORTED_FEATURES;
 
-import android.openfde.P2p;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.net.wifi.CoexUnsafeChannel;
 import android.net.wifi.ScanResult;
-import android.net.wifi.WpsInfo;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pDirInfo;
 import android.net.wifi.p2p.WifiP2pDiscoveryConfig;
@@ -78,7 +75,6 @@ public class WifiP2pNative {
     private final WifiInjector mWifiInjector;
     private final FeatureFlags mFeatureFlags;
     private final Object mLock = new Object();
-    private final P2p mP2p;
     private WifiNative.Iface mP2pIface;
     private String mP2pIfaceName;
     private InterfaceDestroyedListenerInternal mInterfaceDestroyedListener;
@@ -161,7 +157,6 @@ public class WifiP2pNative {
         mPropertyService = propertyService;
         mWifiInjector = wifiInjector;
         mFeatureFlags = wifiInjector.getDeviceConfigFacade().getFeatureFlags();
-        mP2p = P2p.getInstance(null);
     }
 
     /**
@@ -388,7 +383,7 @@ public class WifiP2pNative {
      * @return true if request is sent successfully, false otherwise.
      */
     public boolean setDeviceName(String name) {
-        return mP2p.p2pSet("device_name " + name);
+        return mSupplicantP2pIfaceHal.setWpsDeviceName(name);
     }
 
     /**
@@ -452,7 +447,7 @@ public class WifiP2pNative {
      * @return true if request is sent successfully, false otherwise.
      */
     public boolean setP2pDeviceType(String type) {
-        return mP2p.p2pSet("device_type " + type);
+        return mSupplicantP2pIfaceHal.setWpsDeviceType(type);
     }
 
     /**
@@ -462,7 +457,7 @@ public class WifiP2pNative {
      * @return true if request is sent successfully, false otherwise.
      */
     public boolean setConfigMethods(String cfg) {
-        return mP2p.p2pSet("config_methods " + cfg);
+        return mSupplicantP2pIfaceHal.setWpsConfigMethods(cfg);
     }
 
     /**
@@ -473,7 +468,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean setP2pSsidPostfix(String postfix) {
-        return mP2p.p2pSet("ssid_postfix " + postfix);
+        return mSupplicantP2pIfaceHal.setSsidPostfix(postfix);
     }
 
     /**
@@ -489,7 +484,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean setP2pGroupIdle(String iface, int time) {
-        return mP2p.p2pSet("group_idle " + time);
+        return mSupplicantP2pIfaceHal.setGroupIdle(iface, time);
     }
 
     /**
@@ -502,7 +497,7 @@ public class WifiP2pNative {
      */
     @Keep
     public boolean setP2pPowerSave(String iface, boolean enabled) {
-        return mP2p.p2pSet("power_save " + (enabled ? 1 : 0));
+        return mSupplicantP2pIfaceHal.setPowerSave(iface, enabled);
     }
 
     /**
@@ -512,7 +507,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean setWfdEnable(boolean enable) {
-        return mP2p.p2pSet("wifi_display " + (enable ? 1 : 0));
+        return mSupplicantP2pIfaceHal.enableWfd(enable);
     }
 
     /**
@@ -545,7 +540,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pFind(int timeout) {
-        return mP2p.p2pFind(timeout > 0 ? Integer.toString(timeout) : "");
+        return mSupplicantP2pIfaceHal.find(timeout);
     }
 
     /**
@@ -570,26 +565,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pFind(@WifiP2pManager.WifiP2pScanType int type, int freq, int timeout) {
-        // wpa_cli syntax: p2p_find [timeout] [type=social] [freq=<MHz>]
-        // (a full scan is the default and needs no type argument).
-        StringBuilder args = new StringBuilder();
-        if (timeout > 0) {
-            args.append(timeout);
-        }
-        switch (type) {
-            case WifiP2pManager.WIFI_P2P_SCAN_SOCIAL:
-                if (args.length() > 0) args.append(" ");
-                args.append("type=social");
-                break;
-            case WifiP2pManager.WIFI_P2P_SCAN_SINGLE_FREQ:
-                if (args.length() > 0) args.append(" ");
-                args.append("freq=").append(freq);
-                break;
-            case WifiP2pManager.WIFI_P2P_SCAN_FULL:
-            default:
-                break;
-        }
-        return mP2p.p2pFind(args.toString());
+        return mSupplicantP2pIfaceHal.find(type, freq, timeout);
     }
 
     /**
@@ -611,7 +587,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pStopFind() {
-        return mP2p.p2pStopFind();
+        return mSupplicantP2pIfaceHal.stopFind();
     }
 
     /**
@@ -632,11 +608,7 @@ public class WifiP2pNative {
      */
     public boolean p2pExtListen(boolean enable, int period, int interval,
             @Nullable WifiP2pExtListenParams extListenParams) {
-        if (enable && extListenParams != null) {
-            Log.w(TAG, "p2pExtListen: extListenParams is not supported by the openfde P2p"
-                    + " service, ignoring it.");
-        }
-        return mP2p.p2pExtListen(enable ? period + " " + interval : "");
+        return mSupplicantP2pIfaceHal.configureExtListen(enable, period, interval, extListenParams);
     }
 
     /**
@@ -652,7 +624,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pSetListenChannel(int lc) {
-        return mP2p.p2pSet("p2p_listen_channel " + lc);
+        return mSupplicantP2pIfaceHal.setListenChannel(lc);
     }
 
     /**
@@ -667,7 +639,7 @@ public class WifiP2pNative {
             Log.wtf(TAG, "unsafeChannels is null.");
             return false;
         }
-        return mP2p.p2pSet("p2p_oper_channel " + oc);
+        return mSupplicantP2pIfaceHal.setOperatingChannel(oc, unsafeChannels);
     }
 
     /**
@@ -676,7 +648,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pFlush() {
-        return mP2p.p2pFlush();
+        return mSupplicantP2pIfaceHal.flush();
     }
 
     /**
@@ -690,35 +662,11 @@ public class WifiP2pNative {
      *        part. This must send a Provision Discovery Request message to the
      *        target group owner before associating for WPS provisioning.
      *
-     * @return an empty string on success (the openfde P2p service does not return the
-     *        generated pin), null on failure.
+     * @return String containing generated pin, if selected provision method
+     *        uses PIN.
      */
     public String p2pConnect(WifiP2pConfig config, boolean joinExistingGroup) {
-        String wpsMethod;
-        switch (config.wps.setup) {
-            case WpsInfo.PBC:
-                wpsMethod = "pbc";
-                break;
-            case WpsInfo.DISPLAY:
-                wpsMethod = config.wps.pin;
-                break;
-            case WpsInfo.KEYPAD:
-                wpsMethod = "pin";
-                break;
-            default:
-                Log.e(TAG, "Invalid WPS config method: " + config.wps.setup);
-                return null;
-        }
-        String args = config.deviceAddress + " " + wpsMethod
-                + (joinExistingGroup ? " join" : "");
-        if (!mP2p.p2pConnect(args)) {
-            return null;
-        }
-        if (config.wps.setup == WpsInfo.DISPLAY) {
-            Log.w(TAG, "p2pConnect: the generated PIN is not available from the openfde"
-                    + " P2p service, returning an empty string.");
-        }
-        return "";
+        return mSupplicantP2pIfaceHal.connect(config, joinExistingGroup);
     }
 
     /**
@@ -733,7 +681,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pCancelConnect() {
-        return mP2p.cancelConnect();
+        return mSupplicantP2pIfaceHal.cancelConnect();
     }
 
     /**
@@ -746,22 +694,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pProvisionDiscovery(WifiP2pConfig config) {
-        String method;
-        switch (config.wps.setup) {
-            case WpsInfo.PBC:
-                method = "pbc";
-                break;
-            case WpsInfo.DISPLAY:
-                method = "display";
-                break;
-            case WpsInfo.KEYPAD:
-                method = "keypad";
-                break;
-            default:
-                Log.e(TAG, "Unrecognized WPS configuration method: " + config.wps.setup);
-                return false;
-        }
-        return mP2p.p2pProvDisc(config.deviceAddress + " " + method);
+        return mSupplicantP2pIfaceHal.provisionDiscovery(config);
     }
 
     /**
@@ -774,11 +707,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pGroupAdd(boolean persistent, boolean isP2pV2) {
-        if (isP2pV2) {
-            Log.w(TAG, "p2pGroupAdd: isP2pV2 is not supported by the openfde P2p service,"
-                    + " ignoring it.");
-        }
-        return mP2p.addGroup(persistent, -1);
+        return mSupplicantP2pIfaceHal.groupAdd(persistent, isP2pV2);
     }
 
     /**
@@ -792,11 +721,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pGroupAdd(int netId, boolean isP2pV2) {
-        if (isP2pV2) {
-            Log.w(TAG, "p2pGroupAdd: isP2pV2 is not supported by the openfde P2p service,"
-                    + " ignoring it.");
-        }
-        return mP2p.addGroup(true, netId);
+        return mSupplicantP2pIfaceHal.groupAdd(netId, true, isP2pV2);
     }
 
     /**
@@ -903,7 +828,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pGroupRemove(String iface) {
-        return mP2p.p2pGroupRemove(iface);
+        return mSupplicantP2pIfaceHal.groupRemove(iface);
     }
 
     /**
@@ -917,7 +842,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pReject(String deviceAddress) {
-        return mP2p.p2pReject(deviceAddress);
+        return mSupplicantP2pIfaceHal.reject(deviceAddress);
     }
 
     /**
@@ -934,7 +859,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pInvite(WifiP2pGroup group, String deviceAddress) {
-        return mP2p.p2pInvite("group=" + group.getInterface() + " peer=" + deviceAddress);
+        return mSupplicantP2pIfaceHal.invite(group, deviceAddress);
     }
 
     /**
@@ -991,40 +916,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pServiceAdd(WifiP2pServiceInfo servInfo) {
-        if (servInfo == null || servInfo.getSupplicantQueryList() == null
-                || servInfo.getSupplicantQueryList().isEmpty()) {
-            Log.e(TAG, "Invalid service info passed.");
-            return false;
-        }
-        if (!"bonjour".equals(servInfo.getSupplicantQueryList().get(0).split(" ")[0])) {
-            // UPnP services have no corresponding openfde P2p API, keep using the HAL.
-            return mSupplicantP2pIfaceHal.serviceAdd(servInfo);
-        }
-        for (String s : servInfo.getSupplicantQueryList()) {
-            if (s == null) {
-                Log.e(TAG, "Invalid service description (null).");
-                return false;
-            }
-            // Each entry follows the format: "bonjour <query hex> <response hex>".
-            String[] data = s.split(" ");
-            if (data.length < 3) {
-                Log.e(TAG, "Service specification invalid: " + s);
-                return false;
-            }
-            byte[] query;
-            byte[] response;
-            try {
-                query = hexStringToByteArray(data[1]);
-                response = hexStringToByteArray(data[2]);
-            } catch (IllegalArgumentException e) {
-                Log.e(TAG, "Invalid bonjour service description: " + s);
-                return false;
-            }
-            if (!mP2p.addBonjourService(query, response)) {
-                return false;
-            }
-        }
-        return true;
+        return mSupplicantP2pIfaceHal.serviceAdd(servInfo);
     }
 
     /**
@@ -1035,22 +927,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pServiceDel(WifiP2pServiceInfo servInfo) {
-        if (servInfo == null || servInfo.getSupplicantQueryList() == null) {
-            Log.e(TAG, "Invalid service info passed.");
-            return false;
-        }
-        for (String s : servInfo.getSupplicantQueryList()) {
-            if (s == null) {
-                Log.e(TAG, "Invalid service description (null).");
-                return false;
-            }
-            // Each entry already follows the wpa_cli p2p_service_del format:
-            // "bonjour <query hex> [<response hex>]" or "upnp <version> <service>".
-            if (!mP2p.p2pServiceDel(s)) {
-                return false;
-            }
-        }
-        return true;
+        return mSupplicantP2pIfaceHal.serviceRemove(servInfo);
     }
 
     /**
@@ -1060,7 +937,7 @@ public class WifiP2pNative {
      * @return boolean value indicating whether operation was successful.
      */
     public boolean p2pServiceFlush() {
-        return mP2p.p2pServiceFlush();
+        return mSupplicantP2pIfaceHal.serviceFlush();
     }
 
     /**
@@ -1075,7 +952,7 @@ public class WifiP2pNative {
      *         request.
      */
     public String p2pServDiscReq(String addr, String query) {
-        return mP2p.p2pServDiscReq(addr + " " + query);
+        return mSupplicantP2pIfaceHal.requestServiceDiscovery(addr, query);
     }
 
     /**
@@ -1085,7 +962,7 @@ public class WifiP2pNative {
      * @return true, if operation was successful.
      */
     public boolean p2pServDiscCancelReq(String id) {
-        return mP2p.p2pServDiscCancel(id);
+        return mSupplicantP2pIfaceHal.cancelServiceDiscovery(id);
     }
 
     /**
@@ -1194,7 +1071,8 @@ public class WifiP2pNative {
      * @return true if success
      */
     public boolean removeClient(String peerAddress) {
-        return mP2p.p2pRemoveClient(peerAddress);
+        // The client is deemed as a P2P client, not a legacy client, hence the false.
+        return mSupplicantP2pIfaceHal.removeClient(peerAddress, false);
     }
 
     /**
@@ -1325,22 +1203,6 @@ public class WifiP2pNative {
             WifiP2pConfig config, String groupOwnerInterfaceName) {
         return mSupplicantP2pIfaceHal.authorizeConnectRequestOnGroupOwner(config,
                 groupOwnerInterfaceName);
-    }
-
-    /**
-     * Converts a hex string (e.g. "045f697070") to a byte array.
-     *
-     * @throws IllegalArgumentException if the input is not a valid even-length hex string.
-     */
-    private static byte[] hexStringToByteArray(String hex) {
-        if (hex == null || hex.length() % 2 != 0) {
-            throw new IllegalArgumentException("Invalid hex string: " + hex);
-        }
-        byte[] data = new byte[hex.length() / 2];
-        for (int i = 0; i < data.length; i++) {
-            data[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-        }
-        return data;
     }
 
 }
