@@ -16,31 +16,16 @@
 
 package com.android.server.wifi.p2p;
 
-import android.net.wifi.util.Environment;
 import android.os.IBinder;
-import android.os.IBinder.DeathRecipient;
-import android.os.RemoteException;
-import android.os.ServiceSpecificException;
 import android.util.Log;
 
 import com.android.server.wifi.WifiInjector;
-import com.android.wifi.flags.Flags;
 
 /**
  * Implementation of Supplicant P2P Iface HAL using the vendor AIDL service.
  */
 public class SupplicantP2pIfaceHalAidlVendorImpl extends SupplicantP2pIfaceHalAidlBase {
     private static final String TAG = "SupplicantP2pIfaceHalAidlVendorImpl";
-    private final DeathRecipient mSupplicantDeathRecipient =
-            () -> {
-                Log.d(TAG, "fdep2pIsupplicant died");
-                synchronized (mLock) {
-                    if (mWaitForDeathLatch != null) {
-                        mWaitForDeathLatch.countDown();
-                    }
-                    supplicantServiceDiedHandler();
-                }
-            };
 
     public SupplicantP2pIfaceHalAidlVendorImpl(WifiP2pMonitor monitor, WifiInjector wifiInjector) {
         super(monitor, wifiInjector, false);
@@ -53,42 +38,19 @@ public class SupplicantP2pIfaceHalAidlVendorImpl extends SupplicantP2pIfaceHalAi
     @Override
     public boolean initialize() {
         synchronized (mLock) {
-            final String methodStr = "initialize";
-            if (mISupplicant != null) {
+            if (mInitializationStarted) {
                 Log.i(TAG, "Service is already initialized.");
                 return true;
             }
             mInitializationStarted = true;
             mP2p = null;
-            mISupplicant = getSupplicantMockable();
-            if (mISupplicant == null) {
-                Log.e(TAG, "Unable to obtain ISupplicant binder.");
-                return false;
-            }
-            Log.i(TAG, "Obtained ISupplicant binder.");
-
-            try {
-                IBinder serviceBinder = getCurrentServiceBinderMockable();
-                if (serviceBinder == null) {
-                    return false;
-                }
-                serviceBinder.linkToDeath(mSupplicantDeathRecipient, /* flags= */  0);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-                return false;
-            }
+            return true;
         }
     }
 
     @Override
     protected IBinder getCurrentServiceBinderMockable() {
-        synchronized (mLock) {
-            if (mISupplicant == null) {
-                return null;
-            }
-            return mISupplicant.asBinder();
-        }
+        return null;
     }
 
     /**
@@ -107,34 +69,21 @@ public class SupplicantP2pIfaceHalAidlVendorImpl extends SupplicantP2pIfaceHalAi
     @Override
     public boolean isInitializationComplete() {
         synchronized (mLock) {
-            return mISupplicant != null;
+            return mInitializationStarted;
         }
     }
 
     @Override
+    public boolean setLogLevel(boolean turnOnVerbose, boolean globalShowKeys) {
+        return true;
+    }
+
+    @Override
     protected boolean setCurrentUserIdentity(int userId) {
-        final String methodStr = "setCurrentUserIdentity";
-        if (!Environment.isSdkAtLeastC() || !Flags.multiUserWifiEnhancement()) {
-            return true;
-        }
-        synchronized (mLock) {
-            if (mISupplicant == null) {
-                Log.e(TAG, "mISupplicant is null");
-                return false;
-            }
-            if (getCachedServiceVersion() < 5) {
-                return true;
-            }
-            try {
-                mISupplicant.setCurrentUserIdentity(userId);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-                return false;
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-                return false;
-            }
-        }
+        return true;
+    }
+
+    @Override
+    public void terminate() {
     }
 }
