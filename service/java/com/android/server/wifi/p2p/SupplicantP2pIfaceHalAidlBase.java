@@ -22,7 +22,6 @@ import android.annotation.SuppressLint;
 import android.hardware.wifi.supplicant.DebugLevel;
 import android.hardware.wifi.supplicant.FreqRange;
 import android.hardware.wifi.supplicant.ISupplicant;
-import android.hardware.wifi.supplicant.ISupplicantP2pNetwork;
 import android.hardware.wifi.supplicant.P2pPairingBootstrappingMethodMask;
 import android.hardware.wifi.supplicant.WpsConfigMethods;
 import android.hardware.wifi.supplicant.WpsProvisionMethod;
@@ -57,7 +56,6 @@ import com.android.modules.utils.build.SdkLevel;
 import com.android.server.wifi.WifiInjector;
 import com.android.server.wifi.WifiNative;
 import com.android.server.wifi.WifiSettingsConfigStore;
-import com.android.server.wifi.util.ArrayUtils;
 import com.android.server.wifi.util.NativeUtil;
 import com.android.wifi.flags.Flags;
 
@@ -1651,19 +1649,8 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      * @return List of network ids.
      */
     private int[] listNetworks() {
-        Log.e(TAG, "Persistent network listing is not supported by IP2p");
-        return null;
-    }
-
-    /**
-     * Get the supplicant P2p network object for the specified network ID.
-     *
-     * @param networkId Id of the network to lookup.
-     * @return ISupplicantP2pNetwork instance on success, null on failure.
-     */
-    private ISupplicantP2pNetwork getNetwork(int networkId) {
-        Log.e(TAG, "Persistent network objects are not supported by IP2p");
-        return null;
+        int networkId = mP2p.getNetworkId();
+        return networkId < 0 ? new int[0] : new int[] {networkId};
     }
 
     /**
@@ -1683,26 +1670,9 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 return false;
             }
             for (int networkId : networkIds) {
-                ISupplicantP2pNetwork network = getNetwork(networkId);
-                if (network == null) {
-                    Log.e(TAG, "Failed to retrieve network object for " + networkId);
-                    continue;
-                }
-
-                boolean gotResult = false;
-                boolean isCurrent = false;
-                try {
-                    isCurrent = network.isCurrent();
-                    gotResult = true;
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
-                }
-
                 /** Skip the current network, if we're somehow getting networks from the p2p GO
                  interface, instead of p2p mgmt interface*/
-                if (!gotResult || isCurrent) {
+                if (mP2p.isNetworkCurrent()) {
                     Log.i(TAG, "Skipping current network");
                     continue;
                 }
@@ -1711,51 +1681,23 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 group.setNetworkId(networkId);
 
                 // Now get the ssid, bssid and other flags for this network.
-                byte[] ssid = null;
-                gotResult = false;
-                try {
-                    ssid = network.getSsid();
-                    gotResult = true;
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
-                }
-                if (gotResult && !ArrayUtils.isEmpty(ssid)) {
-                    group.setNetworkName(NativeUtil.removeEnclosingQuotes(
-                            NativeUtil.encodeSsid(
-                                    NativeUtil.byteArrayToArrayList(ssid))));
+                String ssid = mP2p.getNetworkSsid();
+                if (!TextUtils.isEmpty(ssid)) {
+                    group.setNetworkName(NativeUtil.removeEnclosingQuotes(ssid));
                 }
 
-                byte[] bssid = null;
-                gotResult = false;
-                try {
-                    bssid = network.getBssid();
-                    gotResult = true;
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
+                String bssid = mP2p.getNetworkBssid();
+                if (!TextUtils.isEmpty(bssid)) {
+                    try {
+                        WifiP2pDevice device = new WifiP2pDevice();
+                        device.deviceAddress = NativeUtil.macAddressFromByteArray(
+                                NativeUtil.macAddressToByteArray(bssid));
+                        group.setOwner(device);
+                    } catch (IllegalArgumentException e) {
+                        Log.e(TAG, "Invalid persistent network BSSID " + bssid, e);
+                    }
                 }
-                if (gotResult && !ArrayUtils.isEmpty(bssid)) {
-                    WifiP2pDevice device = new WifiP2pDevice();
-                    device.deviceAddress = NativeUtil.macAddressFromByteArray(bssid);
-                    group.setOwner(device);
-                }
-
-                boolean isGroupOwner = false;
-                gotResult = false;
-                try {
-                    isGroupOwner = network.isGroupOwner();
-                    gotResult = true;
-                } catch (RemoteException e) {
-                    handleRemoteException(e, methodStr);
-                } catch (ServiceSpecificException e) {
-                    handleServiceSpecificException(e, methodStr);
-                }
-                if (gotResult) {
-                    group.setIsGroupOwner(isGroupOwner);
-                }
+                group.setIsGroupOwner(mP2p.isNetworkGroupOwner());
                 groups.add(group);
             }
         }
@@ -1896,28 +1838,18 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
                 Log.e(TAG, "Invalid client list");
                 return false;
             }
-            ISupplicantP2pNetwork network = getNetwork(networkId);
-            if (network == null) {
+            if (mP2p.getNetworkId() != networkId) {
                 Log.e(TAG, "Invalid network id ");
                 return false;
             }
 
             try {
                 String[] clientListArr = clientListStr.split("\\s+");
-                android.hardware.wifi.supplicant.MacAddress[] clients =
-                        new android.hardware.wifi.supplicant.MacAddress[clientListArr.length];
                 for (int i = 0; i < clientListArr.length; i++) {
-                    android.hardware.wifi.supplicant.MacAddress client =
-                            new android.hardware.wifi.supplicant.MacAddress();
-                    client.data = NativeUtil.macAddressToByteArray(clientListArr[i]);
-                    clients[i] = client;
+                    clientListArr[i] = NativeUtil.macAddressFromByteArray(
+                            NativeUtil.macAddressToByteArray(clientListArr[i]));
                 }
-                network.setClientList(clients);
-                return true;
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
+                return mP2p.setNetworkClientList(String.join(" ", clientListArr));
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "Illegal argument " + clientListStr, e);
             }
@@ -1937,29 +1869,12 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
             if (!checkP2pIfaceAndLogFailure(methodStr)) {
                 return null;
             }
-            ISupplicantP2pNetwork network = getNetwork(networkId);
-            if (network == null) {
+            if (mP2p.getNetworkId() != networkId) {
                 Log.e(TAG, "Invalid network id ");
                 return null;
             }
-            try {
-                android.hardware.wifi.supplicant.MacAddress[] clients = network.getClientList();
-                String[] macStrings = new String[clients.length];
-                for (int i = 0; i < clients.length; i++) {
-                    try {
-                        macStrings[i] = NativeUtil.macAddressFromByteArray(clients[i].data);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Invalid MAC address received ", e);
-                        return null;
-                    }
-                }
-                return String.join(" ", macStrings);
-            } catch (RemoteException e) {
-                handleRemoteException(e, methodStr);
-            } catch (ServiceSpecificException e) {
-                handleServiceSpecificException(e, methodStr);
-            }
-            return null;
+            String clients = mP2p.getNetworkClientList();
+            return TextUtils.isEmpty(clients) ? "" : clients.replace(',', ' ').trim();
 
         }
     }
