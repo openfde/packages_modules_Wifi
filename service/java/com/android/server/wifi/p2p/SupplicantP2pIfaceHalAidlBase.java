@@ -1023,8 +1023,13 @@ public abstract class SupplicantP2pIfaceHalAidlBase implements ISupplicantP2pIfa
      * @return MAC address of the device.
      */
     public String getDeviceAddress() {
-        Log.e(TAG, "getDeviceAddress is not supported by IP2p");
-        return null;
+        synchronized (mLock) {
+            String methodStr = "getDeviceAddress";
+            if (!checkP2pIfaceAndLogFailure(methodStr)) {
+                return null;
+            }
+            return mP2p.getDeviceAddress();
+        }
     }
 
     /**
