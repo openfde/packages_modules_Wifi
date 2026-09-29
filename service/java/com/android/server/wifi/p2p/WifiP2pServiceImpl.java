@@ -7647,49 +7647,7 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
             String deviceName = mSettingsConfigStore.get(WIFI_P2P_DEVICE_NAME);
             if (!TextUtils.isEmpty(deviceName)) return deviceName;
 
-            // If a default device is already generated and not expired, just return it.
-            long expirationTime = mLastDefaultDeviceNameGeneratingTimeMillis
-                    + DEFAULT_DEVICE_NAME_LIFE_TIME_MILLIS;
-            if (!TextUtils.isEmpty(mDefaultDeviceName)
-                    && expirationTime > mClock.getElapsedSinceBootMillis()) {
-                logd("Return the persistent device name: " + mDefaultDeviceName);
-                return mDefaultDeviceName;
-            }
-
-            String prefix = mWifiGlobals.getWifiP2pDeviceNamePrefix();
-            if (DEVICE_NAME_PREFIX_LENGTH_MAX < prefix.getBytes(StandardCharsets.UTF_8).length
-                    || 0 == prefix.getBytes(StandardCharsets.UTF_8).length) {
-                logw("The length of default device name prefix is invalid"
-                        + ", fallback to default name.");
-                prefix = DEFAULT_DEVICE_NAME_PREFIX;
-            }
-            // The length of remaining bytes is at least {@link #DEVICE_NAME_POSTFIX_LENGTH_MIN}.
-            int remainingBytes =
-                    DEVICE_NAME_LENGTH_MAX - prefix.getBytes(StandardCharsets.UTF_8).length;
-
-            int numDigits = mWifiGlobals.getWifiP2pDeviceNamePostfixNumDigits();
-            if (numDigits > remainingBytes) {
-                logw("The postfix length exceeds the remaining byte number"
-                        + ", use the smaller one.");
-                numDigits = remainingBytes;
-            }
-
-            String postfix;
-            if (numDigits >= DEVICE_NAME_POSTFIX_LENGTH_MIN) {
-                postfix = StringUtil.generateRandomNumberString(numDigits);
-            } else if (!SdkLevel.isAtLeastT()) {
-                // We use the 4 digits of the ANDROID_ID to have a friendly
-                // default that has low likelihood of collision with a peer
-                String id = mFrameworkFacade.getSecureStringSetting(mContext,
-                        Settings.Secure.ANDROID_ID);
-                postfix = id.substring(0, 4);
-            } else {
-                postfix = StringUtil.generateRandomString(4);
-            }
-            mDefaultDeviceName = prefix + postfix;
-            mLastDefaultDeviceNameGeneratingTimeMillis = mClock.getElapsedSinceBootMillis();
-            logd("the default device name: " + mDefaultDeviceName);
-            return mDefaultDeviceName;
+            return "OpenFDE17";
         }
 
         private String generateP2pSsidPostfix(String devName) {
