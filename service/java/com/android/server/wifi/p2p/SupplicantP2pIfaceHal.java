@@ -157,7 +157,6 @@ public class SupplicantP2pIfaceHal {
         synchronized (mLock) {
             String methodStr = "setupIface";
             if (mP2pIfaceHal == null) {
-                Log.e(TAG, "gy mP2pIfaceHal is null in setupIface");
                 return handleNullHal(methodStr);
             }
             return mP2pIfaceHal.setupIface(ifaceName, userId);
@@ -667,7 +666,6 @@ public class SupplicantP2pIfaceHal {
         synchronized (mLock) {
             String methodStr = "setListenChannel";
             if (mP2pIfaceHal == null) {
-                Log.e(TAG,"setListenChannel called with listenChannel: " + listenChannel +" but mP2pIfaceHal is null");
                 return handleNullHal(methodStr);
             }
             return mP2pIfaceHal.setListenChannel(listenChannel);

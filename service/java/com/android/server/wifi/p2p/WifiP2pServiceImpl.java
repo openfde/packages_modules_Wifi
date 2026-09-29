@@ -1543,7 +1543,7 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
         private final WifiP2pInfo mWifiP2pInfo = new WifiP2pInfo();
         private WifiP2pGroup mGroup;
         // Is wifi on or off.
-        private boolean mIsWifiEnabled = false;
+        private boolean mIsWifiEnabled = true;
 
         // Saved WifiP2pConfig for an ongoing peer connection. This will never be null.
         // The deviceAddress will be an empty string when the device is inactive
@@ -2004,8 +2004,7 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
         }
 
         boolean isP2pDisabled() {
-            return false;
-            //return getCurrentState() == mP2pDisabledState;
+            return getCurrentState() == mP2pDisabledState;
         }
 
         void scheduleIdleShutdown() {
@@ -3026,7 +3025,6 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
             }
 
             private boolean setupInterface() {
-		        Log.e(TAG, "gy setup interface wifi service impl");
                 if (!isWifiP2pAvailable()) {
                     Log.e(TAG, "Ignore P2P enable since wifi is " + mIsWifiEnabled
                             + ", P2P disallowed by admin=" + mIsP2pDisallowedByAdmin);
@@ -6089,12 +6087,10 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
         }
 
         public boolean isWifiP2pAvailable() {
-            return true;
-            /*if (mIsP2pDisallowedByAdmin) return false;
+            if (mIsP2pDisallowedByAdmin) return false;
             return mIsWifiEnabled
                     || (mSettingsConfigStore.get(D2D_ALLOWED_WHEN_INFRA_STA_DISABLED)
                             && mWifiGlobals.isD2dSupportedWhenInfraStaDisabled());
-*/
         }
 
         public void checkAndSendP2pStateChangedBroadcast() {
