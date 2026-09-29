@@ -8966,7 +8966,8 @@ public class WifiP2pServiceImpl extends IWifiP2pManager.Stub {
             // p2pReject() only updates the peer state, but not sends this
             // to the peer, trigger provision discovery to notify the peer.
             // Adding the delay to send pb request with failed status attr.
-            mWifiNative.p2pProvisionDiscovery(mSavedPeerConfig);
+            // mWifiNative.p2pProvisionDiscovery(mSavedPeerConfig);
+            //cause we dont have truely provdisc, so we must not to trigger it
             return P2P_REJECTION_WAIT_TIME_MS;
         }
 
