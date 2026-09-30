@@ -89,6 +89,7 @@ java_library {
         "android.hardware.wifi-V1.4-java",
         "android.hardware.wifi-V1.5-java",
         "android.hardware.wifi-V1.6-java",
+         "org.openfde.platform.p2p",
         // AIDL hostapd implementation
         "android.hardware.wifi.hostapd-V3-java",
         // HIDL hostapd implementation
@@ -142,7 +143,9 @@ java_library {
         "standalone-system-server-module-optimize-defaults",
     ],
     installable: true,
-    static_libs: ["wifi-service-pre-jarjar"],
+    static_libs: [
+        "wifi-service-pre-jarjar",
+    ],
 
     dex_preopt: {
         // The profile is updated monthly with the bootclasspath/system_server
