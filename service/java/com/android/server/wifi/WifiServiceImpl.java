@@ -242,6 +242,7 @@ import com.android.wifi.resources.R;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.FileDescriptor;
@@ -375,6 +376,8 @@ public class WifiServiceImpl extends IWifiManager.Stub {
     private final FrameworkFacade mFrameworkFacade;
 
     private final WifiPermissionsUtil mWifiPermissionsUtil;
+
+    private final OpenFdeWifiDelegate mOpenFdeWifi = new OpenFdeWifiDelegate();
 
     private final TetheredSoftApTracker mTetheredSoftApTracker;
 
@@ -992,6 +995,7 @@ public class WifiServiceImpl extends IWifiManager.Stub {
             registerForCarrierConfigChange();
             mWifiInjector.getAdaptiveConnectivityEnabledSettingObserver().initialize();
             mWifiInjector.getNl80211Native().initialize();
+            startOpenFdeEventSubscription();
             mIsWifiServiceStarted = true;
         }, TAG + "#checkAndStartWifi");
     }
@@ -1212,6 +1216,7 @@ public class WifiServiceImpl extends IWifiManager.Stub {
                     }
                 }
             }
+            mOpenFdeWifi.init();
         }, TAG + "#handleBootCompleted");
     }
 
@@ -1262,6 +1267,90 @@ public class WifiServiceImpl extends IWifiManager.Stub {
         }, TAG + "#handleUserStop");
     }
 
+    private static final long OPENFDE_SUB_RETRY_DELAY_MS = 5000;
+    private static final int OPENFDE_SUB_MAX_RETRIES = 24;
+    private int mOpenFdeSubRetries;
+
+    private void startOpenFdeEventSubscription() {
+        if (openFdeEnsureEventSink()) {
+            return;
+        }
+        if (mOpenFdeSubRetries >= OPENFDE_SUB_MAX_RETRIES) {
+            return;
+        }
+        mOpenFdeSubRetries++;
+        mWifiThreadRunner.postDelayed(this::startOpenFdeEventSubscription,
+                OPENFDE_SUB_RETRY_DELAY_MS, TAG + "#openfdeSub", this);
+    }
+
+    private boolean openFdeEnsureEventSink() {
+        mOpenFdeWifi.ensureEventSink(this::onOpenFdeEvent);
+        return mOpenFdeWifi.isEventSinkRegistered();
+    }
+
+    private boolean openFdeCanBroadcast() {
+        if (mIsBootComplete) {
+            return true;
+        }
+        Log.d(TAG, "OpenFDE: drop broadcast before boot completed");
+        return false;
+    }
+
+    private void openFdeSendBroadcast(Intent intent, String permission) {
+        try {
+            mContext.sendBroadcastAsUser(intent, UserHandle.ALL, permission);
+        } catch (IllegalStateException e) {
+            Log.w(TAG, "OpenFDE: broadcast rejected, drop: " + intent.getAction(), e);
+        }
+    }
+
+    private void onOpenFdeEvent(int what, String data) {
+        if (what == OpenFdeWifiDelegate.EVENT_WIFI_STATE_CHANGED) {
+            final boolean enabled;
+            try {
+                enabled = new JSONObject(data).optBoolean("enabled", false);
+            } catch (Exception ignore) {
+                return;
+            }
+            mWifiThreadRunner.post(() ->
+                    mActiveModeWarden.setWifiStateForApiCalls(
+                            enabled ? WifiManager.WIFI_STATE_ENABLED
+                                    : WifiManager.WIFI_STATE_DISABLED),
+                    TAG + "#openfdeEvent");
+        } else if (what == OpenFdeWifiDelegate.EVENT_SCAN_RESULTS_AVAILABLE) {
+            mWifiThreadRunner.post(() -> {
+                if (openFdeCanBroadcast()) {
+                    sendScanResultsAvailableBroadcast(true);
+                }
+            }, TAG + "#openfdeEvent");
+        } else if (what == OpenFdeWifiDelegate.EVENT_CONNECTION_CHANGED) {
+            mWifiThreadRunner.post(() -> {
+                if (!openFdeCanBroadcast()) {
+                    return;
+                }
+                Intent intent = new Intent(WifiManager.NETWORK_STATE_CHANGED_ACTION);
+                openFdeSendBroadcast(intent, android.Manifest.permission.ACCESS_WIFI_STATE);
+            }, TAG + "#openfdeEvent");
+        } else if (what == OpenFdeWifiDelegate.EVENT_RSSI_CHANGED) {
+            mWifiThreadRunner.post(() -> {
+                if (!openFdeCanBroadcast()) {
+                    return;
+                }
+                Intent intent = new Intent(WifiManager.RSSI_CHANGED_ACTION);
+                int rssi = 0;
+                try {
+                    double s = new JSONObject(data).optDouble("strength", 0);
+                    rssi = (int) Math.round(s * 0.7 - 100);
+                } catch (Exception ignore) {
+                }
+                intent.putExtra(WifiManager.EXTRA_NEW_RSSI, rssi);
+                openFdeSendBroadcast(intent, android.Manifest.permission.ACCESS_WIFI_STATE);
+            }, TAG + "#openfdeEvent");
+        } else {
+            Log.e(TAG, "Unknown CallBackEvents ordinal: " + what);
+        }
+    }
+
     /**
      * See {@link android.net.wifi.WifiManager#startScan}
      *
@@ -1297,9 +1386,19 @@ public class WifiServiceImpl extends IWifiManager.Stub {
                     null);
             mLastCallerInfoManager.put(WifiManager.API_START_SCAN, Process.myTid(),
                     callingUid, Binder.getCallingPid(), packageName, true);
-            Boolean scanSuccess = mWifiThreadRunner.call(() ->
-                    mScanRequestProxy.startScan(callingUid, packageName), null,
-                    TAG + "#startScan");
+            Boolean scanSuccess;
+            if (mOpenFdeWifi.isAvailable()) {
+                scanSuccess = mWifiThreadRunner.call(() -> mOpenFdeWifi.startScan(), false,
+                        TAG + "#startScan");
+                if (scanSuccess != null && scanSuccess) {
+                    mWifiThreadRunner.post(() -> sendScanResultsAvailableBroadcast(true),
+                            TAG + "#startScan@notify");
+                }
+            } else {
+                scanSuccess = mWifiThreadRunner.call(() ->
+                        mScanRequestProxy.startScan(callingUid, packageName), null,
+                        TAG + "#startScan");
+            }
             if (scanSuccess == null) {
                 sendFailedScanBroadcast();
                 return false;
@@ -1318,22 +1417,23 @@ public class WifiServiceImpl extends IWifiManager.Stub {
         return true;
     }
 
-    // Send a failed scan broadcast to indicate the current scan request failed.
-    private void sendFailedScanBroadcast() {
-        // clear calling identity to send broadcast
+    // Send a scan results available broadcast, succeeded if requested scan succeeded.
+    private void sendScanResultsAvailableBroadcast(boolean succeeded) {
         long callingIdentity = Binder.clearCallingIdentity();
         try {
-            final boolean scanSucceeded = false;
             Intent intent = new Intent(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
             intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-            intent.putExtra(WifiManager.EXTRA_RESULTS_UPDATED, scanSucceeded);
+            intent.putExtra(WifiManager.EXTRA_RESULTS_UPDATED, succeeded);
             mContext.sendBroadcastAsUser(intent, UserHandle.ALL, null,
-                    createBroadcastOptionsForScanResultsAvailable(scanSucceeded));
+                    createBroadcastOptionsForScanResultsAvailable(succeeded));
         } finally {
-            // restore calling identity
             Binder.restoreCallingIdentity(callingIdentity);
         }
+    }
 
+    // Send a failed scan broadcast to indicate the current scan request failed.
+    private void sendFailedScanBroadcast() {
+        sendScanResultsAvailableBroadcast(false);
     }
 
     /**
@@ -1972,6 +2072,12 @@ public class WifiServiceImpl extends IWifiManager.Stub {
     @Override
     public int getWifiEnabledState() {
         enforceAccessPermission();
+
+        int bridgeState = mOpenFdeWifi.getWifiEnabledState();
+        if (bridgeState != WifiManager.WIFI_STATE_UNKNOWN) {
+            return bridgeState;
+        }
+
         int state = mActiveModeWarden.getWifiState();
         // If the wifi is enabling, call it on the wifi handler to get the state after wifi enabled.
         // This is only needed for pre-T.
@@ -3741,6 +3847,7 @@ public class WifiServiceImpl extends IWifiManager.Stub {
             return false;
         }
         mLog.info("disconnect uid=%").c(callingUid).flush();
+
         mWifiThreadRunner.post(() -> mActiveModeWarden.getPrimaryClientModeManager()
                         .disconnect(callingUid),
                 TAG + "#disconnect");
@@ -5267,11 +5374,17 @@ public class WifiServiceImpl extends IWifiManager.Stub {
             mLog.info("getConnectionInfo uid=%").c(uid).flush();
         }
         mWifiPermissionsUtil.checkPackage(uid, callingPackage);
-        if (mActiveModeWarden.getWifiState() != WIFI_STATE_ENABLED) {
+        boolean bridgeAvailable = mOpenFdeWifi.isAvailable();
+        if (!bridgeAvailable && mActiveModeWarden.getWifiState() != WIFI_STATE_ENABLED) {
             return new WifiInfo();
         }
         WifiInfo wifiInfo;
-        if (isCurrentRequestWsContainsCaller(uid, callingPackage)) {
+        if (bridgeAvailable) {
+            wifiInfo = mOpenFdeWifi.getWifiInfo();
+            if (wifiInfo == null) {
+                wifiInfo = new WifiInfo();
+            }
+        } else if (isCurrentRequestWsContainsCaller(uid, callingPackage)) {
             wifiInfo =
                     mWifiThreadRunner.call(
                             () ->
@@ -5354,9 +5467,15 @@ public class WifiServiceImpl extends IWifiManager.Stub {
         try {
             mWifiPermissionsUtil.enforceCanAccessScanResults(callingPackage, callingFeatureId,
                     uid, null);
-            List<ScanResult> scanResults = mWifiThreadRunner.call(
-                    mScanRequestProxy::getScanResults, Collections.emptyList(),
-                    TAG + "#getScanResults");
+            List<ScanResult> scanResults;
+            if (mOpenFdeWifi.isAvailable()) {
+                List<ScanResult> bridgeResults = mOpenFdeWifi.getScanResults();
+                scanResults = bridgeResults == null ? Collections.emptyList() : bridgeResults;
+            } else {
+                scanResults = mWifiThreadRunner.call(
+                        mScanRequestProxy::getScanResults, Collections.emptyList(),
+                        TAG + "#getScanResults");
+            }
             if (scanResults.size() > 200) {
                 Log.i(TAG, "too many scan results, may break binder transaction");
             }
@@ -5877,6 +5996,10 @@ public class WifiServiceImpl extends IWifiManager.Stub {
         mWifiPermissionsUtil.checkPackage(callingUid, packageName);
         if (mVerboseLoggingEnabled) {
             mLog.info("getDhcpInfo uid=%").c(callingUid).flush();
+        }
+        DhcpInfo bridgeInfo = mOpenFdeWifi.getDhcpInfo();
+        if (bridgeInfo != null) {
+            return bridgeInfo;
         }
         DhcpResultsParcelable dhcpResults = mWifiThreadRunner.call(
                 () -> getClientModeManagerIfSecondaryCmmRequestedByCallerPresent(
@@ -7177,6 +7300,12 @@ public class WifiServiceImpl extends IWifiManager.Stub {
             throw new SecurityException("App not allowed to get Wi-Fi factory MAC address "
                     + "(uid = " + uid + ")");
         }
+
+        String bridgeMac = mOpenFdeWifi.getFactoryMacAddress();
+        if (bridgeMac != null) {
+            return new String[]{bridgeMac};
+        }
+
         // Check the ConfigStore cache first
         if (mWifiGlobals.isSaveFactoryMacToConfigStoreEnabled()) {
             String factoryMacAddressStr = mSettingsConfigStore.get(WIFI_STA_FACTORY_MAC_ADDRESS);
